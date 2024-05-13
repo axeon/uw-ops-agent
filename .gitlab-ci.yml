@@ -1,0 +1,15 @@
+stages:
+  - build
+
+variables:
+  APP_NAME: uw-ops-agent
+  REGISTRY: "dev.xili.pub:5000"
+
+# 编译
+build:
+  stage: build
+  only:
+    - main
+    - master
+  script:
+    - mvn clean package -U -Dmaven.test.skip=true
