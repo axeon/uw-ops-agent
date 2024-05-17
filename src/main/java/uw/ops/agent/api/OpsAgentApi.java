@@ -62,7 +62,7 @@ public class OpsAgentApi {
      */
     public static void reportTaskResult(OpsTask opsTask) throws Exception {
         opsTask.setHostHash( hostHash );
-        log.info( "ReportTaskResult: " + JsonInterfaceHelper.JSON_CONVERTER.toString( opsTask ) );
+        log.info( "ReportTaskResult: {}", JsonInterfaceHelper.JSON_CONVERTER.toString( opsTask ) );
         agentClient.postBodyForData( getOpsCenterHost() + "/agent/ops/reportTaskResult", opsTask );
     }
 

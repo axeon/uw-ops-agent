@@ -28,33 +28,46 @@ import static uw.ops.agent.AgentInfo.AGENT_INFO;
  */
 public class MainService {
 
+    private static final Logger log = LoggerFactory.getLogger( AGENT_INFO );
+
     static {
         //必须是初始化之前执行log属性设置。
-        System.setProperty("org.slf4j.simpleLogger.showDateTime", "true");
-        System.setProperty("org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss.SSS");
+        System.setProperty( "org.slf4j.simpleLogger.showDateTime", "true" );
+        System.setProperty( "org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss.SSS" );
     }
 
-    private static final Logger log = LoggerFactory.getLogger(AGENT_INFO);
-
     public static void main(String[] args) throws Exception {
-        log.info("uw-ops-agent starting at: " + MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath());
+        log.info( "uw-ops-agent starting at: {}", MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath() );
 
         //设置系统属性。
-        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(4, new ThreadFactory() {
+        ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool( 4, new ThreadFactory() {
             public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r);
-                thread.setName("service");
-                thread.setDaemon(false);
+                Thread thread = new Thread( r );
+                thread.setName( "service" );
+                thread.setDaemon( false );
                 return thread;
             }
-        });
+        } );
         //每1个小时上传一次服务器信息。
-        scheduledExecutorService.scheduleAtFixedRate(new UploadHostInfoTask(), 0, 1, TimeUnit.HOURS);
+        scheduledExecutorService.scheduleAtFixedRate( new UploadHostInfoTask(), 0, 1, TimeUnit.HOURS );
         //每60秒钟上传一次服务器性能信息。
-        scheduledExecutorService.scheduleAtFixedRate(new UploadHostStatsTask(), 10, 60, TimeUnit.SECONDS);
+        scheduledExecutorService.scheduleAtFixedRate( new UploadHostStatsTask(), 10, 60, TimeUnit.SECONDS );
         //每10秒钟检查并处理ops任务。
-        scheduledExecutorService.scheduleAtFixedRate(new ProcessOpsTask(), 10, 10, TimeUnit.SECONDS);
-        log.info("uw-ops-agent started!");
+        scheduledExecutorService.scheduleAtFixedRate( new ProcessOpsTask(), 10, 10, TimeUnit.SECONDS );
+        log.info( "uw-ops-agent started!" );
+    }
+
+    /**
+     * 执行任务脚本。
+     *
+     * @param opsTask
+     */
+    private static void runTaskScript(OpsTask opsTask) {
+        log.info( "Shell command execute: \n{}", opsTask.getTaskScript() );
+        List<String> datalist = ShellCmdUtils.runNative( new String[]{"/bin/sh", "-c", opsTask.getTaskScript()}, null, true );
+        opsTask.setTaskResult( StringUtils.join( datalist, "\n" ) );
+        log.info( "Shell receive results: \n{}", opsTask.getTaskResult() );
+        opsTask.setState( TaskState.SUCCEED.getValue() );
     }
 
     /**
@@ -66,11 +79,11 @@ public class MainService {
         public void run() {
             long start = System.currentTimeMillis();
             try {
-                OpsAgentApi.uploadHostInfo(SystemInfoHelper.buildHostInfo());
+                OpsAgentApi.uploadHostInfo( SystemInfoHelper.buildHostInfo() );
             } catch (Throwable e) {
-                log.error(e.getMessage(), e);
+                log.error( e.getMessage(), e );
             }
-            log.info("UploadHostInfoTask run finished in " + (System.currentTimeMillis() - start) + "ms.");
+            log.info( "UploadHostInfoTask run finished in {}ms.", System.currentTimeMillis() - start );
         }
     }
 
@@ -84,11 +97,11 @@ public class MainService {
             //上传服务器统计信息。
             long start = System.currentTimeMillis();
             try {
-                OpsAgentApi.uploadHostStats(SystemInfoHelper.buildHostStats());
+                OpsAgentApi.uploadHostStats( SystemInfoHelper.buildHostStats() );
             } catch (Throwable e) {
-                log.error(e.getMessage(), e);
+                log.error( e.getMessage(), e );
             }
-            log.info("UploadHostStatsTask run finished in " + (System.currentTimeMillis() - start) + "ms.");
+            log.info( "UploadHostStatsTask run finished in {}ms.", System.currentTimeMillis() - start );
 
         }
     }
@@ -98,6 +111,16 @@ public class MainService {
      */
     public static class ProcessOpsTask implements Runnable {
 
+        /**
+         * 报告重试次数100次。
+         */
+        private int REPORT_TRY_TIMES = 100;
+
+        /**
+         * 报告重试间隔10s。
+         */
+        private int REPORT_TRY_INTERVAL = 10_000;
+
         @Override
         public void run() {
             long start = System.currentTimeMillis();
@@ -105,88 +128,81 @@ public class MainService {
             try {
                 ResponseData<List<OpsTask>> responseData = OpsAgentApi.getTaskList();
                 if (responseData.isNotSuccess()) {
-                    log.warn("GetTaskList Error: " + responseData.getMsg());
+                    log.warn( "GetTaskList Error: {}", responseData.getMsg() );
                 } else {
                     List<OpsTask> opsTaskList = responseData.getData();
                     if (opsTaskList != null) {
                         taskAll = opsTaskList.size();
                         for (OpsTask opsTask : responseData.getData()) {
-                            opsTask.setExecuteDate(new Date());
+                            opsTask.setExecuteDate( new Date() );
                             try {
                                 //如果是启动任务，则检查端口可用情况，并替换APP_PORT变量。
-                                if (opsTask.getTaskType() < TaskType.STOP.getValue() && StringUtils.isNotBlank(opsTask.getTaskPorts())) {
-                                    Properties properties = PropertyUtils.loadFromString(opsTask.getTaskPorts());
+                                if (opsTask.getTaskType() < TaskType.STOP.getValue() && StringUtils.isNotBlank( opsTask.getTaskPorts() )) {
+                                    Properties properties = PropertyUtils.loadFromString( opsTask.getTaskPorts() );
                                     String taskScript = opsTask.getTaskScript();
                                     for (String portName : properties.stringPropertyNames()) {
                                         int preferPort = 0;
                                         try {
-                                            preferPort = Integer.parseInt(properties.getProperty(portName));
+                                            preferPort = Integer.parseInt( properties.getProperty( portName ) );
                                         } catch (Exception e) {
                                         }
                                         if (preferPort == 0) {
                                             //此时可能不是端口数据，直接替换。
-                                            taskScript = taskScript.replace("$" + portName, properties.getProperty(portName));
+                                            taskScript = taskScript.replace( "$" + portName, properties.getProperty( portName ) );
                                         } else {
-                                            int usablePort = NetworkUtils.getUsablePort(preferPort);
-                                            properties.setProperty(portName, String.valueOf(usablePort));
-                                            taskScript = taskScript.replace("$" + portName, String.valueOf(usablePort));
+                                            int usablePort = NetworkUtils.getUsablePort( preferPort );
+                                            properties.setProperty( portName, String.valueOf( usablePort ) );
+                                            taskScript = taskScript.replace( "$" + portName, String.valueOf( usablePort ) );
                                         }
                                     }
                                     //保存变更后的端口配置。
-                                    opsTask.setTaskPorts(PropertyUtils.storeToString(properties));
-                                    opsTask.setTaskScript(taskScript);
+                                    opsTask.setTaskPorts( PropertyUtils.storeToString( properties ) );
+                                    opsTask.setTaskScript( taskScript );
                                 }
                                 //单独处理agent升级任务，需要线程异步来跑。
                                 if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {
                                     //对于升级任务，直接设置成功标记。
-                                    opsTask.setTaskResult("!!!uw-ops-agent start software updating......");
-                                    log.warn(opsTask.getTaskResult());
-                                    opsTask.setState(TaskState.STARTING.getValue());
-                                    new Thread(() -> runTaskScript(opsTask)).start();
+                                    opsTask.setTaskResult( "!!!uw-ops-agent start self updating......" );
+                                    log.warn( opsTask.getTaskResult() );
+                                    opsTask.setState( TaskState.STARTING.getValue() );
+                                    new Thread( () -> runTaskScript( opsTask ) ).start();
                                 } else {
-                                    runTaskScript(opsTask);
+                                    runTaskScript( opsTask );
                                     taskSuccess++;
                                 }
                             } catch (Throwable e) {
-                                log.error(e.getMessage(), e);
-                                opsTask.setTaskError(e.getMessage());
-                                opsTask.setState(TaskState.FAIlED.getValue());
+                                log.error( e.getMessage(), e );
+                                opsTask.setTaskError( e.getMessage() );
+                                opsTask.setState( TaskState.FAIlED.getValue() );
                             } finally {
-                                opsTask.setFinishDate(new Date());
-                                //执行任务,执行后上报结果。
-                                try {
-                                    OpsAgentApi.reportTaskResult(opsTask);
-                                } catch (Exception e) {
-                                    log.error(e.getMessage(), e);
+                                opsTask.setFinishDate( new Date() );
+                                //执行任务,执行后上报结果，必须确保上报成功，否则会出现脱控实例。
+                                for (int i = 0; i < REPORT_TRY_TIMES; i++) {
+                                    try {
+                                        OpsAgentApi.reportTaskResult( opsTask );
+                                        break;
+                                    } catch (Throwable e) {
+                                        log.error( "!uw-ops-agent retry report {} times, error message: {}", i, e.getMessage(), e );
+                                    }
+                                    try {
+                                        Thread.sleep( REPORT_TRY_INTERVAL );
+                                    } catch (InterruptedException e) {}
                                 }
                             }
                             //如果是升级任务，则立即挂起。
                             if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {
-                                log.warn("!!!uw-ops-agent run self updating...all task will be halt!");
-                                Thread.sleep(Long.MAX_VALUE);
+                                log.warn( "!!!uw-ops-agent run self updating...all task will be halt!" );
+                                Thread.sleep( Long.MAX_VALUE );
                             }
                         }
                     }
                 }
             } catch (Throwable e) {
-                log.error(e.getMessage(), e);
+                log.error( e.getMessage(), e );
             }
-            log.info("ProcessOpsTask run " + taskSuccess + "/" + taskAll + " tasks finished in " + (System.currentTimeMillis() - start) + "ms.");
+            log.info( "ProcessOpsTask run {}/{} tasks finished in {}ms.", taskSuccess, taskAll, System.currentTimeMillis() - start );
 
         }
-    }
-
-    /**
-     * 执行任务脚本。
-     *
-     * @param opsTask
-     */
-    private static void runTaskScript(OpsTask opsTask) {
-        log.info("Shell command execute: \n{}", opsTask.getTaskScript());
-        List<String> datalist = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", opsTask.getTaskScript()}, null, true);
-        opsTask.setTaskResult(StringUtils.join(datalist, "\n"));
-        log.info("Shell receive results: \n{}", opsTask.getTaskResult());
-        opsTask.setState(TaskState.SUCCEED.getValue());
     }
 
 //    /**
