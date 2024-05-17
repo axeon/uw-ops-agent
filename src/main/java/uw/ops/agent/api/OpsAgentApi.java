@@ -49,8 +49,8 @@ public class OpsAgentApi {
      * @return
      */
     public static ResponseData<List<OpsTask>> getTaskList() throws Exception {
-        return agentClient.postBodyForEntity( getOpsCenterHost() + "/agent/ops/getTaskList", new TypeReference<ResponseData<List<OpsTask>>>() {
-        }, new HashMap<String, String>() {{
+        return agentClient.getForEntity( getOpsCenterHost() + "/agent/ops/getTaskList", new TypeReference<ResponseData<List<OpsTask>>>() {
+        }, new HashMap<>() {{
             put( "hostHash", hostHash );
         }} ).getValue();
     }
@@ -74,7 +74,7 @@ public class OpsAgentApi {
     private static final String getOpsCenterHost() {
         String opsCenterHost = System.getenv( "OPS_CENTER_HOST" );
         if (StringUtils.isBlank( opsCenterHost )) {
-            opsCenterHost = "http://192.168.88.21:1000";
+            opsCenterHost = "http://127.0.0.1:1000";
         }
         return opsCenterHost;
     }
