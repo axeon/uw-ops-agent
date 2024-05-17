@@ -366,6 +366,7 @@
     {"name":"<init>","parameterTypes":[] }, 
     {"name":"setData","parameterTypes":["java.lang.Object"] },
     {"name":"setMsg","parameterTypes":["java.lang.String"] },
+    {"name":"setCode","parameterTypes":["java.lang.String"] },
     {"name":"setState","parameterTypes":["java.lang.String"] }, 
     {"name":"setTimestamp","parameterTypes":["long"] }
   ]
