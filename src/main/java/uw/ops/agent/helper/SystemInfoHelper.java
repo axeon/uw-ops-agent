@@ -129,7 +129,7 @@ public class SystemInfoHelper {
         StringBuilder sb = new StringBuilder();
         sb.append(pi.getName());
 //        sb.append(" ").append(pi.getVendorFreq() / 100000000L / 10d).append("Ghz ");
-        sb.append(processor.getPhysicalPackageCount()).append("CPU").append(processor.getPhysicalProcessorCount()).append("核").append(processor.getLogicalProcessorCount()).append("线程");
+        sb.append(processor.getPhysicalPackageCount()).append("CPU").append(processor.getPhysicalProcessorCount()).append("C").append(processor.getLogicalProcessorCount()).append("T");
         return sb.toString();
     }
 

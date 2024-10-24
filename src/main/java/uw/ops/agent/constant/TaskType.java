@@ -14,16 +14,15 @@ public enum TaskType {
 
     STOP(2, "关闭任务");
 
-
     /**
      * 参数值
      */
-    private int value;
+    private final int value;
 
     /**
      * 参数信息。
      */
-    private String label;
+    private final String label;
 
     TaskType(int value, String label) {
         this.value = value;

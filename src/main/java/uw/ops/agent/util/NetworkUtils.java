@@ -22,13 +22,8 @@ public class NetworkUtils {
      * 已被使用的端口map表。
      * key:port value:检测时间戳
      */
-    private static Map<Integer, Long> usedPortMap = new HashMap<>(100);
+    private static final Map<Integer, Long> usedPortMap = new HashMap<>(100);
 
-    public static void main(String[] args) throws Exception {
-        int inputPort = 3306;
-        System.out.println("输入端口：" + inputPort + ", 递增递归找到可用端口为：" + getUsablePort(inputPort));
-
-    }
 
     /**
      * 检查端口缓存。
