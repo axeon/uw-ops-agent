@@ -3,7 +3,6 @@ on:
   push:
     branches: main
 env:
-  REGISTRY: "dev.xili.pub:5000"
   APP_NAME: uw-ops-agent
 
 jobs:
