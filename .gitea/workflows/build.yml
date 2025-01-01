@@ -13,4 +13,5 @@ jobs:
         run: |
           git config --global user.token ${{ gitea.token }}
           git clone -q ${{gitea.server_url}}/${{ gitea.repository }}.git .
+          source ~/.profile
           mvn clean package -Dmaven.test.skip=true
