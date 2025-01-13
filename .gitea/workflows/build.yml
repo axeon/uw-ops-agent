@@ -16,7 +16,7 @@ jobs:
           git clone -q ${{gitea.server_url}}/${{ gitea.repository }}.git .
           git clone -q ${{gitea.server_url}}/uw/uw-ops-center.git
           source ~/.profile
-          mvn clean package -Dmaven.test.skip=true
+          mvn clean package -U -Dmaven.test.skip=true
           cp -f target/ops-agent uw-ops-center/src/main/resources/public/agent/download/
           cd uw-ops-center
           git add src/main/resources/public/agent/download/ops-agent
