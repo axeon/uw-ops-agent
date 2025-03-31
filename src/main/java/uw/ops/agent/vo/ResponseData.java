@@ -28,7 +28,7 @@ public final class ResponseData<T> {
     public static final String ERROR = "error";
 
     /**
-     * 位置状态值。
+     * 未知状态值
      */
     public static final String UNKNOWN = "unknown";
 
@@ -36,7 +36,7 @@ public final class ResponseData<T> {
     /**
      * 响应时间
      */
-    private long timestamp;
+    private long time;
 
     /**
      * 状态
@@ -59,7 +59,7 @@ public final class ResponseData<T> {
     private T data;
 
     private ResponseData(String state, String code, String msg, T data) {
-        this.timestamp = System.currentTimeMillis();
+        this.time = System.currentTimeMillis();
         this.state = state;
         this.msg = msg;
         this.code = code;
@@ -239,7 +239,7 @@ public final class ResponseData<T> {
     @Override
     public String toString() {
         return "ResponseData{" +
-                "timestamp=" + timestamp +
+                "time=" + time +
                 ", state='" + state + '\'' +
                 ", msg='" + msg + '\'' +
                 ", code=" + code +
@@ -279,11 +279,11 @@ public final class ResponseData<T> {
         this.code = code;
     }
 
-    public long getTimestamp() {
-        return timestamp;
+    public long getTime() {
+        return time;
     }
 
-    public void setTimestamp(long timestamp) {
-        this.timestamp = timestamp;
+    public void setTime(long time) {
+        this.time = time;
     }
 }
