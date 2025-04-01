@@ -13,6 +13,7 @@ import oshi.software.os.FileSystem;
 import oshi.software.os.OSFileStore;
 import oshi.software.os.OperatingSystem;
 import oshi.util.Util;
+import uw.common.util.JsonUtils;
 import uw.httpclient.json.JsonInterfaceHelper;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.HostInfo;
@@ -56,9 +57,9 @@ public class SystemInfoHelper {
         hostInfo.setCpuInfo(getProcessorInfo(hal.getProcessor()));
         hostInfo.setMemInfo(getMemoryInfo(hal.getMemory()));
         List<DiskStats> diskStatsList = getDiskStats(os.getFileSystem());
-        hostInfo.setDiskInfo(JsonInterfaceHelper.JSON_CONVERTER.toString(diskStatsList));
+        hostInfo.setDiskInfo( JsonUtils.toString(diskStatsList));
         List<NetworkStats> networkStatsList = getNetworkInterfaceStats(1000L);
-        hostInfo.setNetworkInfo(JsonInterfaceHelper.JSON_CONVERTER.toString(networkStatsList));
+        hostInfo.setNetworkInfo(JsonUtils.toString(networkStatsList));
         hostInfo.setBootDate(new Date(os.getSystemBootTime() * 1000L));
         //hash出hostHash
         String mac0 = "";
@@ -279,7 +280,7 @@ public class SystemInfoHelper {
         List<DockerPs> psList = new ArrayList<>();
         try {
             List<String> dataList = ShellCmdUtils.runNative(new String[]{"docker", "ps", "--no-trunc", "--format", "{\"ID\":\"{{.ID}}\",\"Name\":\"{{.Names}}\",\"Image\":\"{{.Image}}\",\"Command\":{{json .Command}},\"CreatedAt\":\"{{.CreatedAt}}\",\"State\":\"{{.State}}\",\"Status\":\"{{.Status}}\",\"Mounts\":\"{{.Mounts}}\",\"Networks\":\"{{.Networks}}\",\"Ports\":\"{{.Ports}}\"}"});
-            DockerPsCmd[] psCmds = JsonInterfaceHelper.JSON_CONVERTER.parse("[" + StringUtils.join(dataList, ",") + "]", DockerPsCmd[].class);
+            DockerPsCmd[] psCmds = JsonUtils.parse("[" + StringUtils.join(dataList, ",") + "]", DockerPsCmd[].class);
             for (DockerPsCmd cmd : psCmds) {
                 DockerPs dp = new DockerPs();
                 psList.add(dp);
@@ -307,7 +308,7 @@ public class SystemInfoHelper {
         List<DockerStats> statsList = new ArrayList<>();
         try {
             List<String> dataList = ShellCmdUtils.runNative(new String[]{"docker", "stats", "--no-trunc", "--no-stream", "--format", "{\"ID\":\"{{.ID}}\",\"Name\":\"{{.Name}}\",\"CPUPerc\":\"{{.CPUPerc}}\",\"MemPerc\":\"{{.MemPerc}}\",\"MemUsage\":\"{{.MemUsage}}\",\"BlockIO\":\"{{.BlockIO}}\",\"NetIO\":\"{{.NetIO}}\",\"PIDs\":{{.PIDs}}}"});
-            DockerStatsCmd[] stCmds = JsonInterfaceHelper.JSON_CONVERTER.parse("[" + StringUtils.join(dataList, ",") + "]", DockerStatsCmd[].class);
+            DockerStatsCmd[] stCmds = JsonUtils.parse("[" + StringUtils.join(dataList, ",") + "]", DockerStatsCmd[].class);
             for (DockerStatsCmd cmd : stCmds) {
                 DockerStats ds = new DockerStats();
                 statsList.add(ds);

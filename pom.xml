@@ -52,12 +52,18 @@
         <dependency>
             <groupId>com.umtone</groupId>
             <artifactId>uw-httpclient</artifactId>
-            <version>2.1.116</version>
+            <version>2.1.118</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>33.3.1-jre</version>
+        </dependency>
+        <dependency>
+            <groupId>com.umtone</groupId>
+            <artifactId>uw-common</artifactId>
+            <version>1.0.31</version>
+            <scope>compile</scope>
         </dependency>
 
     </dependencies>

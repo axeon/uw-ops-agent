@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uw.common.util.JsonUtils;
 import uw.httpclient.http.HttpConfig;
 import uw.httpclient.http.HttpInterface;
 import uw.httpclient.json.JsonInterfaceHelper;
@@ -62,7 +63,7 @@ public class OpsAgentApi {
      */
     public static void reportTaskResult(OpsTask opsTask) throws Exception {
         opsTask.setHostHash( hostHash );
-        log.info( "ReportTaskResult: {}", JsonInterfaceHelper.JSON_CONVERTER.toString( opsTask ) );
+        log.info( "ReportTaskResult: {}", JsonUtils.toString( opsTask ) );
         agentClient.postBodyForData( getOpsCenterHost() + "/agent/ops/reportTaskResult", opsTask );
     }
 
