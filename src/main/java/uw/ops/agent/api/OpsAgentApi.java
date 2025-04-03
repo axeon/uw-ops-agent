@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uw.common.dto.ResponseData;
 import uw.common.util.JsonUtils;
 import uw.httpclient.http.HttpConfig;
 import uw.httpclient.http.HttpInterface;
@@ -11,7 +12,6 @@ import uw.httpclient.json.JsonInterfaceHelper;
 import uw.ops.agent.vo.HostInfo;
 import uw.ops.agent.vo.HostStats;
 import uw.ops.agent.vo.OpsTask;
-import uw.ops.agent.vo.ResponseData;
 
 import java.util.HashMap;
 import java.util.List;

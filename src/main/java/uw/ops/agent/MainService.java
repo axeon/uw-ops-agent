@@ -3,6 +3,7 @@ package uw.ops.agent;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uw.common.dto.ResponseData;
 import uw.ops.agent.api.OpsAgentApi;
 import uw.ops.agent.constant.TaskState;
 import uw.ops.agent.constant.TaskType;
@@ -11,7 +12,6 @@ import uw.ops.agent.util.NetworkUtils;
 import uw.ops.agent.util.PropertyUtils;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.OpsTask;
-import uw.ops.agent.vo.ResponseData;
 
 import java.util.Date;
 import java.util.List;
