@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uw.common.dto.ResponseData;
+import uw.common.util.SystemClock;
 import uw.ops.agent.api.OpsAgentApi;
 import uw.ops.agent.constant.TaskState;
 import uw.ops.agent.constant.TaskType;
@@ -77,13 +78,13 @@ public class MainService {
 
         @Override
         public void run() {
-            long start = System.currentTimeMillis();
+            long start = SystemClock.now();
             try {
                 OpsAgentApi.uploadHostInfo( SystemInfoHelper.buildHostInfo() );
             } catch (Throwable e) {
                 log.error( e.getMessage(), e );
             }
-            log.info( "UploadHostInfoTask run finished in {}ms.", System.currentTimeMillis() - start );
+            log.info( "UploadHostInfoTask run finished in {}ms.", SystemClock.now() - start );
         }
     }
 
@@ -95,13 +96,13 @@ public class MainService {
         @Override
         public void run() {
             //上传服务器统计信息。
-            long start = System.currentTimeMillis();
+            long start = SystemClock.now();
             try {
                 OpsAgentApi.uploadHostStats( SystemInfoHelper.buildHostStats() );
             } catch (Throwable e) {
                 log.error( e.getMessage(), e );
             }
-            log.info( "UploadHostStatsTask run finished in {}ms.", System.currentTimeMillis() - start );
+            log.info( "UploadHostStatsTask run finished in {}ms.", SystemClock.now() - start );
 
         }
     }
@@ -123,7 +124,7 @@ public class MainService {
 
         @Override
         public void run() {
-            long start = System.currentTimeMillis();
+            long start = SystemClock.now();
             int taskAll = 0, taskSuccess = 0;
             try {
                 ResponseData<List<OpsTask>> responseData = OpsAgentApi.getTaskList();
@@ -200,7 +201,7 @@ public class MainService {
             } catch (Throwable e) {
                 log.error( e.getMessage(), e );
             }
-            log.info( "ProcessOpsTask run {}/{} tasks finished in {}ms.", taskSuccess, taskAll, System.currentTimeMillis() - start );
+            log.info( "ProcessOpsTask run {}/{} tasks finished in {}ms.", taskSuccess, taskAll, SystemClock.now() - start );
 
         }
     }

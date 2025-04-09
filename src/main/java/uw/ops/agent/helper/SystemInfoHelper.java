@@ -96,10 +96,10 @@ public class SystemInfoHelper {
      * @param args the arguments (unused)
      */
 //    public static void main(String[] args) throws Exception {
-//        long start = System.currentTimeMillis();
+//        long start = SystemClock.now();
 //        System.out.println(buildHostInfo());
 //        System.out.println(buildHostStats());
-//        System.out.println(System.currentTimeMillis() - start);
+//        System.out.println(SystemClock.now() - start);
 //    }
 
     /**

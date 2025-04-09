@@ -2,6 +2,7 @@ package uw.ops.agent.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uw.common.util.SystemClock;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -36,9 +37,9 @@ public class NetworkUtils {
         Long timestamp = usedPortMap.get(port);
         if (timestamp == null) {
             exists = false;
-            usedPortMap.put(port, System.currentTimeMillis());
+            usedPortMap.put(port, SystemClock.now());
         } else {
-            if ((System.currentTimeMillis() - timestamp) > CHECK_TTL) {
+            if ((SystemClock.now() - timestamp) > CHECK_TTL) {
                 exists = false;
                 usedPortMap.remove(port);
             }
