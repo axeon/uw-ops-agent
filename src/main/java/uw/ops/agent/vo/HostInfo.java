@@ -13,7 +13,7 @@ import java.util.Date;
 public class HostInfo {
 
     /**
-     * 唯一id。通过对机器序列号和mac地址做sha1获得。
+     * 唯一id。通过对机器序列号和mac地址做sha1获取。
      */
     private String hostHash;
 

@@ -103,7 +103,7 @@ public class SystemInfoHelper {
 //    }
 
     /**
-     * 获得服务器功率。
+     * 获取服务器功率。
      *
      * @return
      */
@@ -120,7 +120,7 @@ public class SystemInfoHelper {
 
 
     /**
-     * 获得处理器信息。
+     * 获取处理器信息。
      *
      * @param processor
      * @return
@@ -135,7 +135,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得内存信息。
+     * 获取内存信息。
      *
      * @param memory
      * @return
@@ -145,7 +145,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得内存统计信息。
+     * 获取内存统计信息。
      *
      * @param memory
      * @return
@@ -157,7 +157,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得cpu信息。
+     * 获取cpu信息。
      *
      * @param processor
      * @return
@@ -185,7 +185,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得文件系统。
+     * 获取文件系统。
      *
      * @param fileSystem
      * @return
@@ -208,7 +208,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得网络接口信息。
+     * 获取网络接口信息。
      *
      * @return
      */
@@ -272,7 +272,7 @@ public class SystemInfoHelper {
 
 
     /**
-     * 获得docker ps指令列表。
+     * 获取docker ps指令列表。
      *
      * @return
      */
@@ -300,7 +300,7 @@ public class SystemInfoHelper {
     }
 
     /**
-     * 获得docker stats指令列表。
+     * 获取docker stats指令列表。
      *
      * @return
      */

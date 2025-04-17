@@ -68,11 +68,11 @@ public class OpsAgentApi {
     }
 
     /**
-     * 获得opsCenter主机地址。
+     * 获取opsCenter主机地址。
      *
      * @return
      */
-    private static final String getOpsCenterHost() {
+    private static String getOpsCenterHost() {
         String opsCenterHost = System.getenv( "OPS_CENTER_HOST" );
         if (StringUtils.isBlank( opsCenterHost )) {
             opsCenterHost = "http://127.0.0.1:1000";
