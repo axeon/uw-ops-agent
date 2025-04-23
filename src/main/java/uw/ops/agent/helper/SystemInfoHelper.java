@@ -14,7 +14,6 @@ import oshi.software.os.OSFileStore;
 import oshi.software.os.OperatingSystem;
 import oshi.util.Util;
 import uw.common.util.JsonUtils;
-import uw.httpclient.json.JsonInterfaceHelper;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.HostInfo;
 import uw.ops.agent.vo.HostStats;

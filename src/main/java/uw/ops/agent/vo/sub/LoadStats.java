@@ -2,8 +2,6 @@ package uw.ops.agent.vo.sub;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
 
-import static org.apache.commons.lang3.builder.ToStringStyle.SHORT_PREFIX_STYLE;
-
 /**
  * 负载信息。
  */
