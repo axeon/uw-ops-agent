@@ -151,11 +151,11 @@ public class MainService {
                                         }
                                         if (preferPort == 0) {
                                             //此时可能不是端口数据，直接替换。
-                                            taskScript = taskScript.replace( "$" + portName, properties.getProperty( portName ) );
+                                            taskScript = taskScript.replace( "${" + portName+"}", properties.getProperty( portName ) );
                                         } else {
                                             int usablePort = NetworkUtils.getUsablePort( preferPort );
                                             properties.setProperty( portName, String.valueOf( usablePort ) );
-                                            taskScript = taskScript.replace( "$" + portName, String.valueOf( usablePort ) );
+                                            taskScript = taskScript.replace( "${" + portName+"}", String.valueOf( usablePort ) );
                                         }
                                     }
                                     //保存变更后的端口配置。
