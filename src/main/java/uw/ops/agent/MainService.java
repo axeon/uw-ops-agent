@@ -37,6 +37,17 @@ public class MainService {
         System.setProperty( "org.slf4j.simpleLogger.dateTimeFormat", "yyyy-MM-dd HH:mm:ss.SSS" );
     }
 
+    /**
+     * 报告重试次数100次。
+     */
+    private static final int REPORT_TRY_TIMES = 100;
+
+    /**
+     * 报告重试间隔10s。
+     */
+    private static final int REPORT_TRY_INTERVAL = 10_000;
+
+
     public static void main(String[] args) throws Exception {
         log.info( "uw-ops-agent starting at: {}", MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath() );
 
@@ -112,15 +123,6 @@ public class MainService {
      */
     public static class ProcessOpsTask implements Runnable {
 
-        /**
-         * 报告重试次数100次。
-         */
-        private int REPORT_TRY_TIMES = 100;
-
-        /**
-         * 报告重试间隔10s。
-         */
-        private int REPORT_TRY_INTERVAL = 10_000;
 
         @Override
         public void run() {
