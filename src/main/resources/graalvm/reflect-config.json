@@ -1,0 +1,1266 @@
+[
+  {
+    "name": "[B"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.deser.BeanDeserializerModifier;"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.deser.Deserializers;"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.deser.KeyDeserializers;"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.deser.ValueInstantiators;"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.ser.BeanSerializerModifier;"
+  },
+  {
+    "name": "[Lcom.fasterxml.jackson.databind.ser.Serializers;"
+  },
+  {
+    "name": "[Ljava.lang.Object;"
+  },
+  {
+    "name": "[Ljava.lang.String;"
+  },
+  {
+    "name": "[Lsun.security.pkcs.SignerInfo;"
+  },
+  {
+    "name": "[Luw.ops.agent.vo.cmd.DockerPsCmd;"
+  },
+  {
+    "name": "[Luw.ops.agent.vo.cmd.DockerStatsCmd;"
+  },
+  {
+    "name": "com.fasterxml.jackson.databind.ext.Java7SupportImpl",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.AESCipher$General",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.ARCFOURCipher",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.ChaCha20Cipher$ChaCha20Poly1305",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.DESCipher",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.DESedeCipher",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.GaloisCounterMode$AESGCM",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.CallbackProxy",
+    "methods": [
+      {
+        "name": "callback",
+        "parameterTypes": [
+          "java.lang.Object[]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.NativeLong",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.platform.linux.LibC$Statvfs",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.jna.platform.linux.LibC$Sysinfo",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "com.sun.jna.platform.linux.Udev$UdevContext",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.platform.linux.Udev$UdevDevice",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.platform.linux.Udev$UdevEnumerate",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "com.sun.jna.platform.linux.Udev$UdevListEntry",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "double",
+    "queryAllDeclaredMethods": true
+  },
+  {
+    "name": "java.io.Serializable",
+    "queryAllDeclaredMethods": true
+  },
+  {
+    "name": "java.lang.Cloneable",
+    "queryAllDeclaredMethods": true
+  },
+  {
+    "name": "java.lang.Comparable",
+    "queryAllDeclaredMethods": true
+  },
+  {
+    "name": "java.lang.Object",
+    "methods": [
+      {
+        "name": "equals",
+        "parameterTypes": [
+          "java.lang.Object"
+        ]
+      },
+      {
+        "name": "hashCode",
+        "parameterTypes": []
+      },
+      {
+        "name": "toString",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "java.lang.String"
+  },
+  {
+    "name": "java.lang.Throwable",
+    "methods": [
+      {
+        "name": "addSuppressed",
+        "parameterTypes": [
+          "java.lang.Throwable"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "java.lang.invoke.MethodHandle",
+    "methods": [
+      {
+        "name": "bindTo",
+        "parameterTypes": [
+          "java.lang.Object"
+        ]
+      },
+      {
+        "name": "invokeWithArguments",
+        "parameterTypes": [
+          "java.lang.Object[]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "java.lang.invoke.MethodHandles",
+    "methods": [
+      {
+        "name": "lookup",
+        "parameterTypes": []
+      },
+      {
+        "name": "privateLookupIn",
+        "parameterTypes": [
+          "java.lang.Class",
+          "java.lang.invoke.MethodHandles$Lookup"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "java.lang.invoke.MethodHandles$Lookup",
+    "methods": [
+      {
+        "name": "findSpecial",
+        "parameterTypes": [
+          "java.lang.Class",
+          "java.lang.String",
+          "java.lang.invoke.MethodType",
+          "java.lang.Class"
+        ]
+      },
+      {
+        "name": "in",
+        "parameterTypes": [
+          "java.lang.Class"
+        ]
+      },
+      {
+        "name": "unreflectSpecial",
+        "parameterTypes": [
+          "java.lang.reflect.Method",
+          "java.lang.Class"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "java.lang.invoke.MethodType",
+    "methods": [
+      {
+        "name": "methodType",
+        "parameterTypes": [
+          "java.lang.Class",
+          "java.lang.Class[]"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "java.lang.reflect.Method",
+    "methods": [
+      {
+        "name": "isDefault",
+        "parameterTypes": []
+      },
+      {
+        "name": "isVarArgs",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "java.nio.Buffer"
+  },
+  {
+    "name": "java.security.AlgorithmParametersSpi"
+  },
+  {
+    "name": "java.security.KeyStoreSpi"
+  },
+  {
+    "name": "java.security.SecureRandomParameters"
+  },
+  {
+    "name": "java.util.Date",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true
+  },
+  {
+    "name": "java.util.concurrent.ForkJoinTask",
+    "fields": [
+      {
+        "name": "aux"
+      },
+      {
+        "name": "status"
+      }
+    ]
+  },
+  {
+    "name": "java.util.concurrent.atomic.AtomicBoolean",
+    "fields": [
+      {
+        "name": "value"
+      }
+    ]
+  },
+  {
+    "name": "java.util.concurrent.atomic.AtomicReference",
+    "fields": [
+      {
+        "name": "value"
+      }
+    ]
+  },
+  {
+    "name": "javax.security.auth.x500.X500Principal",
+    "fields": [
+      {
+        "name": "thisX500Name"
+      }
+    ],
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "sun.security.x509.X500Name"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "jdk.internal.misc.Unsafe"
+  },
+  {
+    "name": "oshi.jna.Struct$CloseableSysinfo",
+    "allDeclaredFields": true
+  },
+  {
+    "name": "sun.security.pkcs12.PKCS12KeyStore",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.pkcs12.PKCS12KeyStore$DualFormatPKCS12",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.provider.NativePRNG",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      },
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.security.SecureRandomParameters"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.provider.SHA",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.provider.SHA2$SHA256",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.provider.X509Factory",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.rsa.RSAKeyFactory$Legacy",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.ssl.SSLContextImpl$TLSContext",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.ssl.TrustManagerFactoryImpl$PKIXFactory",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "sun.security.util.ObjectIdentifier"
+  },
+  {
+    "name": "sun.security.x509.AuthorityInfoAccessExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.AuthorityKeyIdentifierExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.BasicConstraintsExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.CRLDistributionPointsExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.CertificateExtensions"
+  },
+  {
+    "name": "sun.security.x509.CertificatePoliciesExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.ExtendedKeyUsageExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.IssuerAlternativeNameExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.KeyUsageExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.NetscapeCertTypeExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.PrivateKeyUsageExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.SubjectAlternativeNameExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "sun.security.x509.SubjectKeyIdentifierExtension",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "java.lang.Boolean",
+          "java.lang.Object"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "uw.common.dto.ResponseData",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      },
+      {
+        "name": "setData",
+        "parameterTypes": [
+          "java.lang.Object"
+        ]
+      },
+      {
+        "name": "setState",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setMsg",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setType",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setCode",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTime",
+        "parameterTypes": [
+          "long"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.HostInfo",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getAgentInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getBootDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getCpuInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDiskInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHostHash",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHostName",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMachineModel",
+        "parameterTypes": []
+      },
+      {
+        "name": "getManufacturer",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMemInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNetworkInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getOsInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSerialNumber",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.HostStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getCpuStats",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDiskStatsList",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDockerPsList",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDockerStatsList",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHostHash",
+        "parameterTypes": []
+      },
+      {
+        "name": "getInternetStats",
+        "parameterTypes": []
+      },
+      {
+        "name": "getLoadStats",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMemStats",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNetworkStatsList",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.OpsTask",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      },
+      {
+        "name": "getClusterId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getCreateDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getExecuteDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getFinishDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHostHash",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHostId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getInstanceId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getPlanId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getScheduleDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getState",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskError",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskInfo",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskPorts",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskResult",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskScript",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTaskType",
+        "parameterTypes": []
+      },
+      {
+        "name": "setClusterId",
+        "parameterTypes": [
+          "long"
+        ]
+      },
+      {
+        "name": "setHostId",
+        "parameterTypes": [
+          "long"
+        ]
+      },
+      {
+        "name": "setId",
+        "parameterTypes": [
+          "long"
+        ]
+      },
+      {
+        "name": "setInstanceId",
+        "parameterTypes": [
+          "long"
+        ]
+      },
+      {
+        "name": "setPlanId",
+        "parameterTypes": [
+          "long"
+        ]
+      },
+      {
+        "name": "setScheduleDate",
+        "parameterTypes": [
+          "java.util.Date"
+        ]
+      },
+      {
+        "name": "setState",
+        "parameterTypes": [
+          "int"
+        ]
+      },
+      {
+        "name": "setHostHash",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTaskInfo",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTaskPorts",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTaskScript",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTaskResult",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setTaskError",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "setCreateDate",
+        "parameterTypes": [
+          "java.util.Date"
+        ]
+      },
+      {
+        "name": "setExecuteDate",
+        "parameterTypes": [
+          "java.util.Date"
+        ]
+      },
+      {
+        "name": "setFinishDate",
+        "parameterTypes": [
+          "java.util.Date"
+        ]
+      },
+      {
+        "name": "setTaskType",
+        "parameterTypes": [
+          "int"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.cmd.DockerPsCmd",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.cmd.DockerStatsCmd",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.CpuStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getContextSwitches",
+        "parameterTypes": []
+      },
+      {
+        "name": "getHardIrq",
+        "parameterTypes": []
+      },
+      {
+        "name": "getIdle",
+        "parameterTypes": []
+      },
+      {
+        "name": "getInterrupts",
+        "parameterTypes": []
+      },
+      {
+        "name": "getIoWait",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNice",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSoftIrq",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSteal",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSys",
+        "parameterTypes": []
+      },
+      {
+        "name": "getUser",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.DiskStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getFsType",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMount",
+        "parameterTypes": []
+      },
+      {
+        "name": "getName",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTotal",
+        "parameterTypes": []
+      },
+      {
+        "name": "getUsable",
+        "parameterTypes": []
+      },
+      {
+        "name": "getVolume",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.DockerPs",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getCommand",
+        "parameterTypes": []
+      },
+      {
+        "name": "getCreateDate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getImage",
+        "parameterTypes": []
+      },
+      {
+        "name": "getName",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNetwork",
+        "parameterTypes": []
+      },
+      {
+        "name": "getState",
+        "parameterTypes": []
+      },
+      {
+        "name": "getStatus",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.DockerStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getCpuPercent",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDiskRead",
+        "parameterTypes": []
+      },
+      {
+        "name": "getDiskWrite",
+        "parameterTypes": []
+      },
+      {
+        "name": "getId",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMemPercent",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMemTotal",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMemUsage",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNetworkIn",
+        "parameterTypes": []
+      },
+      {
+        "name": "getNetworkOut",
+        "parameterTypes": []
+      },
+      {
+        "name": "getPidCount",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.InternetStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getCloseWait",
+        "parameterTypes": []
+      },
+      {
+        "name": "getEstablished",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSynSend",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTimeWait",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.LoadStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getLoad15m",
+        "parameterTypes": []
+      },
+      {
+        "name": "getLoad1m",
+        "parameterTypes": []
+      },
+      {
+        "name": "getLoad5m",
+        "parameterTypes": []
+      },
+      {
+        "name": "getPower",
+        "parameterTypes": []
+      },
+      {
+        "name": "getProcessCount",
+        "parameterTypes": []
+      },
+      {
+        "name": "getThreadCount",
+        "parameterTypes": []
+      },
+      {
+        "name": "getUptime",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.MemStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getPageSize",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSwapPagesIn",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSwapPagesOut",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSwapTotal",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSwapUsed",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTotal",
+        "parameterTypes": []
+      },
+      {
+        "name": "getUsable",
+        "parameterTypes": []
+      },
+      {
+        "name": "getVirtualInUse",
+        "parameterTypes": []
+      },
+      {
+        "name": "getVirtualMax",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
+    "name": "uw.ops.agent.vo.sub.NetworkStats",
+    "allDeclaredFields": true,
+    "queryAllDeclaredMethods": true,
+    "queryAllDeclaredConstructors": true,
+    "methods": [
+      {
+        "name": "getIndex",
+        "parameterTypes": []
+      },
+      {
+        "name": "getIp",
+        "parameterTypes": []
+      },
+      {
+        "name": "getMac",
+        "parameterTypes": []
+      },
+      {
+        "name": "getName",
+        "parameterTypes": []
+      },
+      {
+        "name": "getRxRate",
+        "parameterTypes": []
+      },
+      {
+        "name": "getSpeed",
+        "parameterTypes": []
+      },
+      {
+        "name": "getTxRate",
+        "parameterTypes": []
+      }
+    ]
+  }
+]

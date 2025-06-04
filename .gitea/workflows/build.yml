@@ -1,0 +1,25 @@
+name: build
+on:
+  push:
+    branches: [main]
+env:
+  APP_NAME: uw-ops-agent
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: build
+        run: |
+          git config --global user.token ${{ gitea.token }}
+          git config --global user.email "23231269@qq.com"
+          git clone -q ${{gitea.server_url}}/${{ gitea.repository }}.git .
+          git clone -q ${{gitea.server_url}}/uw/uw-ops-center.git
+          source ~/.profile
+          mvn clean package -U -Dmaven.test.skip=true
+          cp -f target/ops-agent uw-ops-center/src/main/resources/public/agent/download/
+          cd uw-ops-center
+          git add src/main/resources/public/agent/download/ops-agent
+          git commit -m "ops-agent ci auto build"
+          git push origin main
+          echo "ops-agent build success!"
