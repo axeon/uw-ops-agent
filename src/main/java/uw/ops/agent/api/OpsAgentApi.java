@@ -9,6 +9,7 @@ import uw.common.util.JsonUtils;
 import uw.httpclient.http.HttpConfig;
 import uw.httpclient.http.HttpInterface;
 import uw.httpclient.json.JsonInterfaceHelper;
+import uw.httpclient.util.SSLContextUtils;
 import uw.ops.agent.vo.HostInfo;
 import uw.ops.agent.vo.HostStats;
 import uw.ops.agent.vo.OpsTask;
@@ -23,7 +24,7 @@ public class OpsAgentApi {
 
     private static final Logger log = LoggerFactory.getLogger( OpsAgentApi.class );
     private static final HttpInterface agentClient =
-            new JsonInterfaceHelper( HttpConfig.builder().connectTimeout( 30000 ).readTimeout( 30000 ).writeTimeout( 30000 ).retryOnConnectionFailure( true ).hostnameVerifier((hostName, sslSession) -> true).build() );
+            new JsonInterfaceHelper( HttpConfig.builder().connectTimeout( 30000 ).readTimeout( 30000 ).writeTimeout( 30000 ).retryOnConnectionFailure( true ).trustManager( SSLContextUtils.getTrustAllManager() ).sslSocketFactory( SSLContextUtils.getTruestAllSocketFactory()).hostnameVerifier((hostName, sslSession) -> true).build() );
     /**
      * 主机hash,唯一标识符。
      */
