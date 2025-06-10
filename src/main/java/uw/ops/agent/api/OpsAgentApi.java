@@ -23,7 +23,7 @@ public class OpsAgentApi {
 
     private static final Logger log = LoggerFactory.getLogger( OpsAgentApi.class );
     private static final HttpInterface agentClient =
-            new JsonInterfaceHelper( HttpConfig.builder().connectTimeout( 30000 ).readTimeout( 30000 ).writeTimeout( 30000 ).retryOnConnectionFailure( true ).build() );
+            new JsonInterfaceHelper( HttpConfig.builder().connectTimeout( 30000 ).readTimeout( 30000 ).writeTimeout( 30000 ).retryOnConnectionFailure( true ).hostnameVerifier((hostName, sslSession) -> true).build() );
     /**
      * 主机hash,唯一标识符。
      */
