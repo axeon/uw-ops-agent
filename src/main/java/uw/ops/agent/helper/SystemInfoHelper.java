@@ -181,10 +181,11 @@ public class SystemInfoHelper {
         for (HWDiskStore hd : hal.getDiskStores()) {
             DiskStats diskStats = new DiskStats();
             list.add(diskStats);
+            hd.updateAttributes();
             diskStats.setName(hd.getName());
             diskStats.setModel(hd.getModel());
             diskStats.setSerial(hd.getSerial());
-            diskStats.setSize(hd.getSize() / 1024 / 1024 / 1024);
+            diskStats.setSize(hd.getSize());
             diskStats.setReads(hd.getReads());
             diskStats.setReadBytes(hd.getReadBytes());
             diskStats.setWrites(hd.getWrites());
