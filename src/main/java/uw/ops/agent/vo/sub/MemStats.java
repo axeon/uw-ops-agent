@@ -1,7 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * 内存信息。
  */
@@ -63,21 +61,6 @@ public class MemStats {
         this.virtualInUse = virtualInUse;
         this.swapPagesIn = swapPagesIn;
         this.swapPagesOut = swapPagesOut;
-    }
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("total", total)
-                .append("usable", usable)
-                .append("pageSize", pageSize)
-                .append("swapTotal", swapTotal)
-                .append("swapUsed", swapUsed)
-                .append("virtualMax", virtualMax)
-                .append("virtualInUse", virtualInUse)
-                .append("swapPagesIn", swapPagesIn)
-                .append("swapPagesOut", swapPagesOut)
-                .toString();
     }
 
     public long getTotal() {

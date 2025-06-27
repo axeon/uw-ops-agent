@@ -1,7 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * cpu信息。
  */
@@ -68,22 +66,6 @@ public class CpuStats {
         this.hardIrq = hardIrq;
         this.softIrq = softIrq;
         this.steal = steal;
-    }
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("contextSwitches", contextSwitches)
-                .append("interrupts", interrupts)
-                .append("user", user)
-                .append("nice", nice)
-                .append("sys", sys)
-                .append("idle", idle)
-                .append("ioWait", ioWait)
-                .append("hardIrq", hardIrq)
-                .append("softIrq", softIrq)
-                .append("steal", steal)
-                .toString();
     }
 
     public long getContextSwitches() {

@@ -1,7 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * 网络相关信息。
  */
@@ -41,19 +39,6 @@ public class NetworkStats {
      * 接收速率
      */
     private long rxRate;
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("index",index)
-                .append("name", name)
-                .append("mac", mac)
-                .append("speed", speed)
-                .append("ip", ip)
-                .append("txRate", txRate)
-                .append("rxRate", rxRate)
-                .toString();
-    }
 
     public int getIndex() {
         return index;

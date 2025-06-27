@@ -1,7 +1,5 @@
 package uw.ops.agent.vo;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import uw.ops.agent.vo.sub.*;
 
 import java.util.List;
@@ -12,39 +10,55 @@ import java.util.List;
  */
 public class HostStats {
 
+    /**
+     * 设备唯一标识。
+     */
     private String hostHash;
 
+    /**
+     * CPU统计信息。
+     */
     private CpuStats cpuStats;
 
+    /**
+     * 内存统计信息。
+     */
     private MemStats memStats;
 
+    /**
+     * 负载统计信息。
+     */
     private LoadStats loadStats;
 
+    /**
+     * 网络统计信息。
+     */
     private InternetStats internetStats;
 
+    /**
+     * 磁盘统计信息。
+     */
     private List<DiskStats> diskStatsList;
 
+    /**
+     * 文件系统统计信息。
+     */
+    private List<FsStats> fsStatsList;
+
+    /**
+     * 网络统计信息。
+     */
     private List<NetworkStats> networkStatsList;
 
+    /**
+     * Docker进程列表。
+     */
     private List<DockerPs> dockerPsList;
 
+    /**
+     * Docker进程列表。
+     */
     private List<DockerStats> dockerStatsList;
-
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
-                .append("hostHash", hostHash)
-                .append("cpuStats", cpuStats)
-                .append("memStats", memStats)
-                .append("loadStats", loadStats)
-                .append("diskStatsList", diskStatsList)
-                .append("networkStatsList", networkStatsList)
-                .append("internetStats", internetStats)
-                .append("dockerPsList", dockerPsList)
-                .append("dockerStatsList", dockerStatsList)
-                .toString();
-    }
 
     public String getHostHash() {
         return hostHash;
@@ -84,6 +98,14 @@ public class HostStats {
 
     public void setDiskStatsList(List<DiskStats> diskStatsList) {
         this.diskStatsList = diskStatsList;
+    }
+
+    public List<FsStats> getFsStatsList() {
+        return fsStatsList;
+    }
+
+    public void setFsStatsList(List<FsStats> fsStatsList) {
+        this.fsStatsList = fsStatsList;
     }
 
     public List<NetworkStats> getNetworkStatsList() {

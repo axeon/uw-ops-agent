@@ -1,8 +1,6 @@
 package uw.ops.agent.vo.sub;
 
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 import java.util.Date;
 
 /**
@@ -49,20 +47,6 @@ public class DockerPs {
      * 启动时间。Up 5 weeks
      */
     private String status;
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("id", id)
-                .append("name", name)
-                .append("image", image)
-                .append("createAt", createDate)
-                .append("Command", command)
-                .append("network", network)
-                .append("State", state)
-                .append("Status", status)
-                .toString();
-    }
 
     public String getId() {
         return id;

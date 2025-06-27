@@ -1,7 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * 负载信息。
  */
@@ -53,19 +51,6 @@ public class LoadStats {
         this.power = power;
         this.processCount = processCount;
         this.threadCount = threadCount;
-    }
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("uptime", uptime)
-                .append("load1m", load1m)
-                .append("load5m", load5m)
-                .append("load15m", load15m)
-                .append("power", power)
-                .append("processCount", processCount)
-                .append("threadCount", threadCount)
-                .toString();
     }
 
     public long getUptime() {

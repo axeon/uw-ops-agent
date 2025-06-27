@@ -5,6 +5,6 @@ package uw.ops.agent;
  */
 public class AgentInfo {
 
-    public static final String AGENT_INFO = "uw-ops-agent:1.1.1";
+    public static final String AGENT_INFO = "uw-ops-agent:1.1.2";
 
 }

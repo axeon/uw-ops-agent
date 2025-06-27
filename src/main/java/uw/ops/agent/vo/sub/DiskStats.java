@@ -1,9 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
-import static org.apache.commons.lang3.builder.ToStringStyle.SHORT_PREFIX_STYLE;
-
 /**
  * 磁盘信息
  */
@@ -15,41 +11,49 @@ public class DiskStats {
     private String name;
 
     /**
-     * volume。
+     * 型号。
      */
-    private String volume;
+    private String model;
 
     /**
-     * 文件系统。
+     * 序列号。
      */
-    private String fsType;
+    private String serial;
 
     /**
-     * 挂载点。
+     * 大小。
      */
-    private String mount;
+    private long size;
 
     /**
-     * 大小
+     * 读取次数。
      */
-    private long total;
+    private long reads;
 
     /**
-     * 可用大小。
+     * 读取字节数。
      */
-    private long usable;
+    private long readBytes;
 
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this, SHORT_PREFIX_STYLE)
-                .append("name", name)
-                .append("volume", volume)
-                .append("fsType", fsType)
-                .append("mount", mount)
-                .append("total", total)
-                .append("usable", usable)
-                .toString();
-    }
+    /**
+     * 写入次数。
+     */
+    private long writes;
+
+    /**
+     * 写入字节数。
+     */
+    private long writeBytes;
+
+    /**
+     * 传输时间
+     */
+    private long transferTime;
+
+    /**
+     * 队列长度
+     */
+    private long queueLength;
 
     public String getName() {
         return name;
@@ -59,43 +63,75 @@ public class DiskStats {
         this.name = name;
     }
 
-    public String getVolume() {
-        return volume;
+    public String getModel() {
+        return model;
     }
 
-    public void setVolume(String volume) {
-        this.volume = volume;
+    public void setModel(String model) {
+        this.model = model;
     }
 
-    public String getFsType() {
-        return fsType;
+    public String getSerial() {
+        return serial;
     }
 
-    public void setFsType(String fsType) {
-        this.fsType = fsType;
+    public void setSerial(String serial) {
+        this.serial = serial;
     }
 
-    public String getMount() {
-        return mount;
+    public long getSize() {
+        return size;
     }
 
-    public void setMount(String mount) {
-        this.mount = mount;
+    public void setSize(long size) {
+        this.size = size;
     }
 
-    public long getTotal() {
-        return total;
+    public long getReads() {
+        return reads;
     }
 
-    public void setTotal(long total) {
-        this.total = total;
+    public void setReads(long reads) {
+        this.reads = reads;
     }
 
-    public long getUsable() {
-        return usable;
+    public long getReadBytes() {
+        return readBytes;
     }
 
-    public void setUsable(long usable) {
-        this.usable = usable;
+    public void setReadBytes(long readBytes) {
+        this.readBytes = readBytes;
+    }
+
+    public long getWrites() {
+        return writes;
+    }
+
+    public void setWrites(long writes) {
+        this.writes = writes;
+    }
+
+    public long getWriteBytes() {
+        return writeBytes;
+    }
+
+    public void setWriteBytes(long writeBytes) {
+        this.writeBytes = writeBytes;
+    }
+
+    public long getTransferTime() {
+        return transferTime;
+    }
+
+    public void setTransferTime(long transferTime) {
+        this.transferTime = transferTime;
+    }
+
+    public long getQueueLength() {
+        return queueLength;
+    }
+
+    public void setQueueLength(long queueLength) {
+        this.queueLength = queueLength;
     }
 }

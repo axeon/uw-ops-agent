@@ -1,7 +1,5 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * docker容器统计
  */
@@ -56,22 +54,6 @@ public class DockerStats {
      * 进程/线程数。
      */
     private int pidCount;
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("id", id)
-                .append("cpuPercent", cpuPercent)
-                .append("memPercent", memPercent)
-                .append("memUsage", memUsage)
-                .append("memTotal", memTotal)
-                .append("diskWrite", diskWrite)
-                .append("diskRead", diskRead)
-                .append("networkIn", networkIn)
-                .append("networkOut", networkOut)
-                .append("pidCount", pidCount)
-                .toString();
-    }
 
     public String getId() {
         return id;

@@ -12,7 +12,6 @@ import java.util.Date;
  */
 public class OpsTask implements Serializable {
 
-
     /**
      * id
      */

@@ -1,7 +1,6 @@
 package uw.ops.agent.helper;
 
 
-import com.google.common.hash.Hashing;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.slf4j.Logger;
@@ -13,6 +12,7 @@ import oshi.software.os.FileSystem;
 import oshi.software.os.OSFileStore;
 import oshi.software.os.OperatingSystem;
 import oshi.util.Util;
+import uw.common.util.DigestUtils;
 import uw.common.util.JsonUtils;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.HostInfo;
@@ -42,6 +42,10 @@ public class SystemInfoHelper {
 
     private static String HOST_HASH = "";
 
+    public static void main(String[] args) {
+        System.out.println(JsonUtils.toString(getDiskStats()));
+    }
+
     /**
      * 构建系统信息。
      */
@@ -55,21 +59,22 @@ public class SystemInfoHelper {
         hostInfo.setOsInfo(os.toString());
         hostInfo.setCpuInfo(getProcessorInfo(hal.getProcessor()));
         hostInfo.setMemInfo(getMemoryInfo(hal.getMemory()));
-        List<DiskStats> diskStatsList = getDiskStats(os.getFileSystem());
-        hostInfo.setDiskInfo( JsonUtils.toString(diskStatsList));
+        List<DiskStats> diskStatsList = getDiskStats();
+        hostInfo.setDiskInfo(JsonUtils.toString(diskStatsList));
+        List<FsStats> fsStatsList = getFsStats(os.getFileSystem());
+        hostInfo.setFsInfo(JsonUtils.toString(fsStatsList));
         List<NetworkStats> networkStatsList = getNetworkInterfaceStats(1000L);
         hostInfo.setNetworkInfo(JsonUtils.toString(networkStatsList));
         hostInfo.setBootDate(new Date(os.getSystemBootTime() * 1000L));
         //hash出hostHash
         String mac0 = "";
-        if (networkStatsList.size() > 0) {
-            mac0 = networkStatsList.get(0).getMac();
+        if (!networkStatsList.isEmpty()) {
+            mac0 = networkStatsList.getFirst().getMac();
         }
-        HOST_HASH = Hashing.sha256().hashBytes((hostInfo.getMachineModel() + "$" + hostInfo.getSerialNumber() + "$" + mac0).getBytes()).toString();
+        HOST_HASH = DigestUtils.signHex(hostInfo.getMachineModel() + "$" + hostInfo.getSerialNumber() + "$" + mac0, DigestUtils.Algorithm.SHA_256);
         hostInfo.setHostHash(HOST_HASH);
         return hostInfo;
     }
-
 
     /**
      * 构建系统统计信息。
@@ -80,26 +85,14 @@ public class SystemInfoHelper {
         hostStats.setCpuStats(getCpuStats(hal.getProcessor(), 3000L));
         hostStats.setMemStats(getMemoryStats(hal.getMemory()));
         hostStats.setLoadStats(getLoadStats());
-        hostStats.setDiskStatsList(getDiskStats(os.getFileSystem()));
+        hostStats.setDiskStatsList(getDiskStats());
+        hostStats.setFsStatsList(getFsStats(os.getFileSystem()));
         hostStats.setNetworkStatsList(getNetworkInterfaceStats(3000L));
         hostStats.setInternetStats(getInternetProtocolStats());
         hostStats.setDockerPsList(getDockerPsList());
         hostStats.setDockerStatsList(getDockerStatsList());
         return hostStats;
     }
-
-
-    /**
-     * The main method, demonstrating use of classes.
-     *
-     * @param args the arguments (unused)
-     */
-//    public static void main(String[] args) throws Exception {
-//        long start = SystemClock.now();
-//        System.out.println(buildHostInfo());
-//        System.out.println(buildHostStats());
-//        System.out.println(SystemClock.now() - start);
-//    }
 
     /**
      * 获取服务器功率。
@@ -116,7 +109,6 @@ public class SystemInfoHelper {
         double[] loadAverage = hal.getProcessor().getSystemLoadAverage(3);
         return new LoadStats(os.getSystemUptime(), Math.round(100 * loadAverage[0]) / 100d, Math.round(100 * loadAverage[1]) / 100d, Math.round(100 * loadAverage[2]) / 100d, (long) power, os.getProcessCount(), os.getThreadCount());
     }
-
 
     /**
      * 获取处理器信息。
@@ -151,8 +143,7 @@ public class SystemInfoHelper {
      */
     private static MemStats getMemoryStats(GlobalMemory memory) {
         VirtualMemory vm = memory.getVirtualMemory();
-        return new MemStats(memory.getTotal(), memory.getAvailable(), memory.getPageSize(),
-                vm.getSwapTotal(), vm.getSwapUsed(), vm.getVirtualMax(), vm.getVirtualInUse(), vm.getSwapPagesIn(), vm.getSwapPagesOut());
+        return new MemStats(memory.getTotal(), memory.getAvailable(), memory.getPageSize(), vm.getSwapTotal(), vm.getSwapUsed(), vm.getVirtualMax(), vm.getVirtualInUse(), vm.getSwapPagesIn(), vm.getSwapPagesOut());
     }
 
     /**
@@ -164,10 +155,10 @@ public class SystemInfoHelper {
     private static CpuStats getCpuStats(CentralProcessor processor, long interval) {
         long[] prevTicks = processor.getSystemCpuLoadTicks();
         long prevCs = processor.getContextSwitches();
-        long prevIn =  processor.getInterrupts();
+        long prevIn = processor.getInterrupts();
         Util.sleep(interval);
-        long cs = (processor.getContextSwitches()-prevCs)/(interval/1000);
-        long in =   (processor.getInterrupts()-prevIn)/(interval/1000);
+        long cs = (processor.getContextSwitches() - prevCs) / (interval / 1000);
+        long in = (processor.getInterrupts() - prevIn) / (interval / 1000);
         long[] ticks = processor.getSystemCpuLoadTicks();
         long user = ticks[TickType.USER.getIndex()] - prevTicks[TickType.USER.getIndex()];
         long nice = ticks[TickType.NICE.getIndex()] - prevTicks[TickType.NICE.getIndex()];
@@ -178,9 +169,30 @@ public class SystemInfoHelper {
         long softirq = ticks[TickType.SOFTIRQ.getIndex()] - prevTicks[TickType.SOFTIRQ.getIndex()];
         long steal = ticks[TickType.STEAL.getIndex()] - prevTicks[TickType.STEAL.getIndex()];
         long totalCpu = user + nice + sys + idle + iowait + irq + softirq + steal;
-        return new CpuStats(cs, in,
-                Math.round(10000 * user / totalCpu) / 100d, Math.round(10000 * nice / totalCpu) / 100d, Math.round(10000 * sys / totalCpu) / 100d, Math.round(10000 * idle / totalCpu) / 100d,
-                Math.round(10000 * iowait / totalCpu) / 100d, Math.round(10000 * irq / totalCpu) / 100d, Math.round(10000 * softirq / totalCpu) / 100d, Math.round(10000 * steal / totalCpu) / 100d);
+        return new CpuStats(cs, in, Math.round(10000 * user / totalCpu) / 100d, Math.round(10000 * nice / totalCpu) / 100d, Math.round(10000 * sys / totalCpu) / 100d, Math.round(10000 * idle / totalCpu) / 100d, Math.round(10000 * iowait / totalCpu) / 100d, Math.round(10000 * irq / totalCpu) / 100d, Math.round(10000 * softirq / totalCpu) / 100d, Math.round(10000 * steal / totalCpu) / 100d);
+    }
+
+
+    /**
+     * 获取磁盘信息。
+     */
+    private static List<DiskStats> getDiskStats() {
+        List<DiskStats> list = new ArrayList<>();
+        for (HWDiskStore hd : hal.getDiskStores()) {
+            DiskStats diskStats = new DiskStats();
+            list.add(diskStats);
+            diskStats.setName(hd.getName());
+            diskStats.setModel(hd.getModel());
+            diskStats.setSerial(hd.getSerial());
+            diskStats.setSize(hd.getSize() / 1024 / 1024 / 1024);
+            diskStats.setReads(hd.getReads());
+            diskStats.setReadBytes(hd.getReadBytes());
+            diskStats.setWrites(hd.getWrites());
+            diskStats.setWriteBytes(hd.getWriteBytes());
+            diskStats.setQueueLength(hd.getCurrentQueueLength());
+            diskStats.setTransferTime(hd.getTransferTime());
+        }
+        return list;
     }
 
     /**
@@ -189,10 +201,10 @@ public class SystemInfoHelper {
      * @param fileSystem
      * @return
      */
-    private static List<DiskStats> getDiskStats(FileSystem fileSystem) {
-        List<DiskStats> list = new ArrayList<>();
+    private static List<FsStats> getFsStats(FileSystem fileSystem) {
+        List<FsStats> list = new ArrayList<>();
         for (OSFileStore fs : fileSystem.getFileStores()) {
-            DiskStats diskStats = new DiskStats();
+            FsStats diskStats = new FsStats();
             list.add(diskStats);
             diskStats.setName(fs.getName());
             diskStats.setFsType(fs.getType());
@@ -252,23 +264,24 @@ public class SystemInfoHelper {
      * 查询联网协议统计。
      */
     private static InternetStats getInternetProtocolStats() {
-        String[] cmdToRunWithArgs = new String[]{"/bin/sh", "-c", "netstat -n|awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'"};
-        List<String> dataList = ShellCmdUtils.runNative(cmdToRunWithArgs, null,false);
+        String[] cmdToRunWithArgs = new String[]{"/bin/sh", "-c", "ss -t | awk '{++S[$1]} END {for(a in S) print a, S[a]}'"};
+        List<String> dataList = ShellCmdUtils.runNative(cmdToRunWithArgs, null, false);
         InternetStats is = new InternetStats();
         for (String line : dataList) {
-            if (line.startsWith("ESTABLISHED")) {
-                is.setEstablished(Integer.parseInt(line.substring(12)));
-            } else if (line.startsWith("CLOSE_WAIT")) {
+            if (line.startsWith("ESTAB")) {
+                is.setEstablished(Integer.parseInt(line.substring(6)));
+            } else if (line.startsWith("CLOSE-WAIT")) {
                 is.setCloseWait(Integer.parseInt(line.substring(11)));
-            } else if (line.startsWith("TIME_WAIT")) {
+            } else if (line.startsWith("TIME-WAIT")) {
                 is.setTimeWait(Integer.parseInt(line.substring(10)));
-            } else if (line.startsWith("SYN_SEND")) {
-                is.setSynSend(Integer.parseInt(line.substring(9)));
+            } else if (line.startsWith("SYN-SENT")) {
+                is.setSynSent(Integer.parseInt(line.substring(9)));
+            } else if (line.startsWith("SYN-RECV")) {
+                is.setSynSent(Integer.parseInt(line.substring(9)));
             }
         }
         return is;
     }
-
 
     /**
      * 获取docker ps指令列表。

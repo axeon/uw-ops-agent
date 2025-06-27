@@ -1,7 +1,5 @@
 package uw.ops.agent.vo;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-import org.apache.commons.lang3.builder.ToStringStyle;
 import uw.ops.agent.AgentInfo;
 
 import java.util.Date;
@@ -63,6 +61,11 @@ public class HostInfo {
     private String diskInfo;
 
     /**
+     * 文件系统信息。
+     */
+    private String fsInfo;
+
+    /**
      * ip信息。
      */
     private String networkInfo;
@@ -71,24 +74,6 @@ public class HostInfo {
      * 启动时间。
      */
     private Date bootDate;
-
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this, ToStringStyle.MULTI_LINE_STYLE)
-                .append("hostHash", hostHash)
-                .append("hostName", hostName)
-                .append("manufacturer", manufacturer)
-                .append("machineModel", machineModel)
-                .append("serialNumber", serialNumber)
-                .append("agentInfo", agentInfo)
-                .append("osInfo", osInfo)
-                .append("cpuInfo", cpuInfo)
-                .append("memInfo", memInfo)
-                .append("diskInfo", diskInfo)
-                .append("networkInfo", networkInfo)
-                .append("bootDate", bootDate)
-                .toString();
-    }
 
     public String getHostHash() {
         return hostHash;
@@ -168,6 +153,14 @@ public class HostInfo {
 
     public void setDiskInfo(String diskInfo) {
         this.diskInfo = diskInfo;
+    }
+
+    public String getFsInfo() {
+        return fsInfo;
+    }
+
+    public void setFsInfo(String fsInfo) {
+        this.fsInfo = fsInfo;
     }
 
     public String getNetworkInfo() {

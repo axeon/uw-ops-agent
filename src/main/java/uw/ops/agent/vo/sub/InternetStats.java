@@ -1,16 +1,9 @@
 package uw.ops.agent.vo.sub;
 
-import org.apache.commons.lang3.builder.ToStringBuilder;
-
 /**
  * 网络相关信息。
  */
 public class InternetStats {
-
-    /**
-     * 对方关闭连接中或异常中断中。
-     */
-    private int closeWait;
 
     /**
      * 已连接。
@@ -18,23 +11,31 @@ public class InternetStats {
     private int established;
 
     /**
-     * 我方请求连接中。
+     * 对方关闭连接中或异常中断中。
      */
-    private int synSend;
+    private int closeWait;
 
     /**
      * 我方关闭连接中。
      */
     private int timeWait;
 
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this)
-                .append("closeWait", closeWait)
-                .append("established", established)
-                .append("synSend", synSend)
-                .append("timeWait", timeWait)
-                .toString();
+    /**
+     * 本地端主动发起连接后，等待对方确认（客户端主动连接时的初始状态）。
+     */
+    private int synSent;
+
+    /**
+     * 服务器收到 SYN 包后，正在等待本地应用程序处理连接。
+     */
+    private int synRecv;
+
+    public int getEstablished() {
+        return established;
+    }
+
+    public void setEstablished(int established) {
+        this.established = established;
     }
 
     public int getCloseWait() {
@@ -45,27 +46,27 @@ public class InternetStats {
         this.closeWait = closeWait;
     }
 
-    public int getEstablished() {
-        return established;
-    }
-
-    public void setEstablished(int established) {
-        this.established = established;
-    }
-
-    public int getSynSend() {
-        return synSend;
-    }
-
-    public void setSynSend(int synSend) {
-        this.synSend = synSend;
-    }
-
     public int getTimeWait() {
         return timeWait;
     }
 
     public void setTimeWait(int timeWait) {
         this.timeWait = timeWait;
+    }
+
+    public int getSynSent() {
+        return synSent;
+    }
+
+    public void setSynSent(int synSent) {
+        this.synSent = synSent;
+    }
+
+    public int getSynRecv() {
+        return synRecv;
+    }
+
+    public void setSynRecv(int synRecv) {
+        this.synRecv = synRecv;
     }
 }
