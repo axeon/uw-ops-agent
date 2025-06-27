@@ -32,7 +32,7 @@ public class SystemInfoHelper {
 
     private static final Logger logger = LoggerFactory.getLogger(SystemInfoHelper.class);
 
-    private static final FastDateFormat dateFormat = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss");
+    private static final FastDateFormat dateFormat = FastDateFormat.getInstance("yyyy-MM-dd HH:mm:ss ZZZZ");
 
     private static final SystemInfo systemInfo = new SystemInfo();
 
@@ -41,10 +41,6 @@ public class SystemInfoHelper {
     private static final OperatingSystem os = systemInfo.getOperatingSystem();
 
     private static String HOST_HASH = "";
-
-    public static void main(String[] args) {
-        System.out.println(JsonUtils.toString(getDiskStats()));
-    }
 
     /**
      * 构建系统信息。
