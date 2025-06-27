@@ -68,6 +68,9 @@ public class CpuStats {
         this.steal = steal;
     }
 
+    public CpuStats() {
+    }
+
     public long getContextSwitches() {
         return contextSwitches;
     }

@@ -63,6 +63,9 @@ public class MemStats {
         this.swapPagesOut = swapPagesOut;
     }
 
+    public MemStats() {
+    }
+
     public long getTotal() {
         return total;
     }

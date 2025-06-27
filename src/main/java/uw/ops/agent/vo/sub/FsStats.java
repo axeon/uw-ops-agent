@@ -39,18 +39,6 @@ public class FsStats {
      */
     private long usable;
 
-    @Override
-    public String toString() {
-        return new ToStringBuilder(this, SHORT_PREFIX_STYLE)
-                .append("name", name)
-                .append("volume", volume)
-                .append("fsType", fsType)
-                .append("mount", mount)
-                .append("total", total)
-                .append("usable", usable)
-                .toString();
-    }
-
     public String getName() {
         return name;
     }
