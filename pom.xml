@@ -85,6 +85,7 @@
                     <buildArgs>
                         --no-fallback
                         --verbose
+                        -march=x86-64
                         -H:ReflectionConfigurationFiles=classes/graalvm/reflect-config.json
                         -H:DynamicProxyConfigurationFiles=classes/graalvm/proxy-config.json
                         -H:+JNI -H:JNIConfigurationFiles=classes/graalvm/jni-config.json
