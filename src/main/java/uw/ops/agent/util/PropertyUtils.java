@@ -18,10 +18,11 @@ public class PropertyUtils {
 
     /**
      * 从字符串中加载Properties。
+     *
      * @param data
      * @return
      */
-    public static Properties loadFromString(String data){
+    public static Properties loadFromString(String data) {
         Properties properties = new Properties();
         try {
             properties.load(new StringReader(data));
@@ -33,13 +34,14 @@ public class PropertyUtils {
 
     /**
      * 把Properties保存到字符串中。
+     *
      * @param properties
      * @return
      */
-    public static String storeToString(Properties properties){
+    public static String storeToString(Properties properties) {
         StringBuilder sb = new StringBuilder();
-        for (Map.Entry<Object, Object> kv:properties.entrySet()){
-            sb.append( kv.getKey() ).append( "=").append( kv.getValue() ).append( "\n" );
+        for (Map.Entry<Object, Object> kv : properties.entrySet()) {
+            sb.append(kv.getKey()).append("=").append(kv.getValue()).append("\n");
         }
         return sb.toString();
     }
@@ -47,7 +49,7 @@ public class PropertyUtils {
     public static void main(String[] args) throws IOException {
         String data = "# test\na=b\nc=d";
         Properties properties = loadFromString(data);
-        properties.put("x","z");
+        properties.put("x", "z");
         data = storeToString(properties);
         System.out.println(data);
     }

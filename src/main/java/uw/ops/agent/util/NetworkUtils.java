@@ -12,19 +12,19 @@ import java.util.Map;
 
 public class NetworkUtils {
 
+
     private static final Logger log = LoggerFactory.getLogger(NetworkUtils.class);
 
     /**
      * 端口检测的ttl。
      */
-    public static final long CHECK_TTL = 300_000L;
+    private static final long CHECK_TTL = 300_000L;
 
     /**
      * 已被使用的端口map表。
      * key:port value:检测时间戳
      */
     private static final Map<Integer, Long> usedPortMap = new HashMap<>(100);
-
 
     /**
      * 检查端口缓存。

@@ -8,7 +8,6 @@ import java.util.Date;
  * 部署任务对列表
  *
  * @author axeon
- * @version $Revision: 1.00 $ $Date: 2023-04-28 02:45:58
  */
 public class OpsTask implements Serializable {
 
