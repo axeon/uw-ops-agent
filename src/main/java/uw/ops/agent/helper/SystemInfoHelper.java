@@ -21,7 +21,6 @@ import uw.ops.agent.vo.cmd.DockerPsCmd;
 import uw.ops.agent.vo.cmd.DockerStatsCmd;
 import uw.ops.agent.vo.sub.*;
 
-import java.net.NetworkInterface;
 import java.net.SocketException;
 import java.util.*;
 
@@ -230,15 +229,19 @@ public class SystemInfoHelper {
         List<NetworkStats> dataList = new ArrayList<>();
         for (int i = 0; i < list.size(); i++) {
             NetworkIF net = list.get(i);
-            NetworkInterface ni = net.queryNetworkInterface();
-            if (net.getSpeed() == 0 || net.getIPv4addr().length == 0) {
+            // 过滤掉没有ip的网卡
+            if (net.getIPv4addr().length == 0) {
                 continue;
             }
-            if (net.getName().startsWith("docker")) {
+            String netName = net.getName();
+            // 过滤掉常见的虚拟网卡
+            if (netName.startsWith("lo") || netName.startsWith("docker") || netName.startsWith("veth") ||
+                    netName.startsWith("br-") || netName.startsWith("vmnet") || netName.startsWith("virbr") ||
+                    netName.startsWith("tun") || netName.startsWith("tap")) {
                 continue;
             }
             NetworkStats networkStats = new NetworkStats();
-            networkStats.setName(net.getName());
+            networkStats.setName(netName);
             networkStats.setIp(Arrays.toString(net.getIPv4addr()));
             networkStats.setMac(net.getMacaddr());
             networkStats.setSpeed(net.getSpeed());

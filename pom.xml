@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.umtone</groupId>
     <artifactId>uw-ops-agent</artifactId>
-    <version>1.1.2</version>
+    <version>1.1.8</version>
     <packaging>jar</packaging>
     <name>uw-ops-agent</name>
     <description>uw-ops-agent</description>
