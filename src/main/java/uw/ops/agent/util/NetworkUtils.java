@@ -7,8 +7,8 @@ import uw.common.util.SystemClock;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class NetworkUtils {
 
@@ -24,7 +24,7 @@ public class NetworkUtils {
      * 已被使用的端口map表。
      * key:port value:检测时间戳
      */
-    private static final Map<Integer, Long> usedPortMap = new HashMap<>(100);
+    private static final Map<Integer, Long> usedPortMap = new ConcurrentHashMap<>(100);
 
     /**
      * 检查端口缓存。
