@@ -6,9 +6,9 @@ import java.util.regex.Pattern;
 /**
  * 任务脚本安全检查工具。
  */
-public final class ScriptGuard {
+public final class ShellRiskChecker {
 
-    private ScriptGuard() {
+    private ShellRiskChecker() {
     }
 
     /**
@@ -40,7 +40,7 @@ public final class ScriptGuard {
      * @param script 脚本内容
      * @return 危险命令描述，null表示安全
      */
-    public static String checkDangerousCommands(String script) {
+    public static String checkRisk(String script) {
         if (script == null || script.isEmpty()) {
             return null;
         }

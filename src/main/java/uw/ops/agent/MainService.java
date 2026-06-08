@@ -12,7 +12,7 @@ import uw.ops.agent.constant.TaskType;
 import uw.ops.agent.helper.SystemInfoHelper;
 import uw.ops.agent.util.NetworkUtils;
 import uw.ops.agent.util.PropertyUtils;
-import uw.ops.agent.util.ScriptGuard;
+import uw.ops.agent.util.ShellRiskChecker;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.OpsTask;
 
@@ -215,7 +215,7 @@ public class MainService {
                                     opsTask.setTaskScript(taskScript);
                                 }
                                 //危险命令检查
-                                String danger = ScriptGuard.checkDangerousCommands(opsTask.getTaskScript());
+                                String danger = ShellRiskChecker.checkRisk(opsTask.getTaskScript());
                                 if (danger != null) {
                                     throw new SecurityException(danger);
                                 }
