@@ -45,6 +45,31 @@
     ]
   },
   {
+    "name": "javax.crypto.Mac",
+    "queryAllDeclaredMethods": true
+  },
+  {
+    "name": "javax.crypto.spec.SecretKeySpec",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": [
+          "byte[]",
+          "java.lang.String"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "com.sun.crypto.provider.HmacSHA256",
+    "methods": [
+      {
+        "name": "<init>",
+        "parameterTypes": []
+      }
+    ]
+  },
+  {
     "name": "com.sun.crypto.provider.AESCipher$General",
     "methods": [
       {
@@ -935,6 +960,26 @@
         "name": "setTaskType",
         "parameterTypes": [
           "int"
+        ]
+      },
+      {
+        "name": "getTaskSign",
+        "parameterTypes": []
+      },
+      {
+        "name": "setTaskSign",
+        "parameterTypes": [
+          "java.lang.String"
+        ]
+      },
+      {
+        "name": "getTaskStamp",
+        "parameterTypes": []
+      },
+      {
+        "name": "setTaskStamp",
+        "parameterTypes": [
+          "long"
         ]
       }
     ]

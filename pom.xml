@@ -31,7 +31,7 @@
         <dependency>
             <groupId>com.umtone</groupId>
             <artifactId>uw-common</artifactId>
-            <version>1.0.83</version>
+            <version>1.0.93</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
