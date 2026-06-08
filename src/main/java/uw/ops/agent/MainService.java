@@ -4,6 +4,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uw.common.dto.ResponseData;
+import uw.common.util.HmacUtils;
 import uw.common.util.SystemClock;
 import uw.ops.agent.api.OpsAgentApi;
 import uw.ops.agent.constant.TaskState;
@@ -11,6 +12,7 @@ import uw.ops.agent.constant.TaskType;
 import uw.ops.agent.helper.SystemInfoHelper;
 import uw.ops.agent.util.NetworkUtils;
 import uw.ops.agent.util.PropertyUtils;
+import uw.ops.agent.util.ScriptGuard;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.OpsTask;
 
@@ -39,6 +41,14 @@ public class MainService {
      * 报告重试间隔10s。
      */
     private static final int REPORT_TRY_INTERVAL = 10_000;
+    /**
+     * 签名时间窗口：5分钟。
+     */
+    private static final long SIGN_TIME_WINDOW = 300_000L;
+    /**
+     * 任务签名密钥，从环境变量读取。
+     */
+    private static final String TASK_SECRET = System.getenv("OPS_TASK_SECRET");
 
     static {
         //必须是初始化之前执行log属性设置。
@@ -48,6 +58,9 @@ public class MainService {
 
     public static void main(String[] args) throws Exception {
         log.info("uw-ops-agent starting at: {}", MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath());
+        if ("root".equals(System.getProperty("user.name"))) {
+            log.warn("!!!uw-ops-agent is running as root, which is not recommended for security reasons.");
+        }
 
         //设置系统属性。
         AtomicInteger threadCounter = new AtomicInteger(0);
@@ -64,6 +77,26 @@ public class MainService {
         //每10秒钟检查并处理ops任务。
         scheduledExecutorService.scheduleAtFixedRate(new ProcessOpsTask(), 10, 10, TimeUnit.SECONDS);
         log.info("uw-ops-agent started!");
+    }
+
+    /**
+     * 验证任务签名。密钥未配置时跳过验签（向后兼容）。
+     */
+    private static void verifyTaskSign(OpsTask opsTask) {
+        if (StringUtils.isBlank(TASK_SECRET)) {
+            return;
+        }
+        if (StringUtils.isBlank(opsTask.getTaskSign())) {
+            throw new SecurityException("任务签名缺失，拒绝执行");
+        }
+        long now = SystemClock.now();
+        if (Math.abs(now - opsTask.getTaskStamp()) > SIGN_TIME_WINDOW) {
+            throw new SecurityException("任务签名已过期，拒绝执行");
+        }
+        String message = opsTask.getId() + ":" + opsTask.getTaskScript() + ":" + opsTask.getTaskStamp();
+        if (!HmacUtils.verify(message, TASK_SECRET, opsTask.getTaskSign())) {
+            throw new SecurityException("任务签名校验失败，拒绝执行");
+        }
     }
 
     /**
@@ -156,6 +189,8 @@ public class MainService {
                         for (OpsTask opsTask : responseData.getData()) {
                             opsTask.setExecuteDate(new Date());
                             try {
+                                //验签校验（必须在端口替换之前，校验原始脚本）
+                                verifyTaskSign(opsTask);
                                 //如果是启动任务，则检查端口可用情况，并替换APP_PORT变量。
                                 if (opsTask.getTaskType() < TaskType.STOP.getValue() && StringUtils.isNotBlank(opsTask.getTaskPorts())) {
                                     Properties properties = PropertyUtils.loadFromString(opsTask.getTaskPorts());
@@ -178,6 +213,11 @@ public class MainService {
                                     //保存变更后的端口配置。
                                     opsTask.setTaskPorts(PropertyUtils.storeToString(properties));
                                     opsTask.setTaskScript(taskScript);
+                                }
+                                //危险命令检查
+                                String danger = ScriptGuard.checkDangerousCommands(opsTask.getTaskScript());
+                                if (danger != null) {
+                                    throw new SecurityException(danger);
                                 }
                                 //单独处理agent升级任务，需要线程异步来跑。
                                 if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {

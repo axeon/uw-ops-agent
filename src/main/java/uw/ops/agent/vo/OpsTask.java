@@ -62,6 +62,16 @@ public class OpsTask implements Serializable {
     private String taskScript;
 
     /**
+     * 任务签名(HMAC-SHA256)
+     */
+    private String taskSign;
+
+    /**
+     * 签名时间戳(毫秒)
+     */
+    private long taskStamp;
+
+    /**
      * 任务执行结果
      */
     private String taskResult;
@@ -230,6 +240,22 @@ public class OpsTask implements Serializable {
 
     public void setState(int state) {
         this.state = state;
+    }
+
+    public String getTaskSign() {
+        return taskSign;
+    }
+
+    public void setTaskSign(String taskSign) {
+        this.taskSign = taskSign;
+    }
+
+    public long getTaskStamp() {
+        return taskStamp;
+    }
+
+    public void setTaskStamp(long taskStamp) {
+        this.taskStamp = taskStamp;
     }
 
 }
