@@ -9,7 +9,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 @JsonFormat(shape = JsonFormat.Shape.OBJECT)
 public enum TaskState {
 
-    FAIlED(-1, "已失败"),
+    FAILED(-1, "已失败"),
 
     INIT(1,"初始化"),
 

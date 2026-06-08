@@ -28,7 +28,7 @@ public class OpsAgentApi {
     /**
      * 主机hash,唯一标识符。
      */
-    private static String hostHash;
+    private static volatile String hostHash;
 
     /**
      * 上传主机设备信息。

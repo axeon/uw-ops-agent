@@ -24,6 +24,9 @@ public class PropertyUtils {
      */
     public static Properties loadFromString(String data) {
         Properties properties = new Properties();
+        if (data == null || data.isEmpty()) {
+            return properties;
+        }
         try {
             properties.load(new StringReader(data));
         } catch (IOException e) {

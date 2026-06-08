@@ -8,47 +8,47 @@ public class DockerStats {
     /**
      * 容器id。
      */
-    public String id;
+    private String id;
 
     /**
      * cpu占用率。
      */
-    public double cpuPercent;
+    private double cpuPercent;
 
     /**
      * 内存使用率。
      */
-    public double memPercent;
+    private double memPercent;
 
     /**
      * 内存使用。
      */
-    public long memUsage;
+    private long memUsage;
 
     /**
      * 内存限制。
      */
-    public long memTotal;
+    private long memTotal;
 
     /**
      * 磁盘写。
      */
-    public long diskWrite;
+    private long diskWrite;
 
     /**
      * 磁盘读。
      */
-    public long diskRead;
+    private long diskRead;
 
     /**
-     * 网络上行速率。
+     * 网络入站速率。
      */
-    public long networkIn;
+    private long networkIn;
 
     /**
-     * 网络下行速率。
+     * 网络出站速率。
      */
-    public long networkOut;
+    private long networkOut;
 
     /**
      * 进程/线程数。

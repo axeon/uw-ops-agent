@@ -11,17 +11,17 @@ public class DockerPs {
     /**
      * 容器id。
      */
-    public String id;
+    private String id;
 
     /**
      * 容器名。
      */
-    public String name;
+    private String name;
 
     /**
      * 镜像。
      */
-    public String image;
+    private String image;
 
     /**
      * 创建时间。2023-03-27 14:37:43 +0800 CST

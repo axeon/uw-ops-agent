@@ -37,6 +37,9 @@ public enum TaskType {
         return label;
     }
 
+    /**
+     * @return 匹配的TaskType，未找到时返回null
+     */
     public static TaskType findByValue(int value) {
         for (TaskType e : TaskType.values()) {
             if (value == e.value) {

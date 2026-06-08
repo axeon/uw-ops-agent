@@ -8,47 +8,47 @@ public class MemStats {
     /**
      * 总内存数
      */
-    long total;
+    private long total;
 
     /**
      * 可用内存数。
      */
-    long usable;
+    private long usable;
 
     /**
      * 页大小。
      */
-    long pageSize;
+    private long pageSize;
 
     /**
      * swap大小
      */
-    long swapTotal;
+    private long swapTotal;
 
     /**
      * 已用的swap
      */
-    long swapUsed;
+    private long swapUsed;
 
     /**
      * 虚拟内存大小
      */
-    long virtualMax;
+    private long virtualMax;
 
     /**
      * 虚拟内存已用。
      */
-    long virtualInUse;
+    private long virtualInUse;
 
     /**
      * swap page in
      */
-    long swapPagesIn;
+    private long swapPagesIn;
 
     /**
      * swap page out
      */
-    long swapPagesOut;
+    private long swapPagesOut;
 
 
     public MemStats(long total, long usable, long pageSize, long swapTotal, long swapUsed, long virtualMax, long virtualInUse, long swapPagesIn, long swapPagesOut) {
