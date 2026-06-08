@@ -17,6 +17,8 @@ import uw.ops.agent.vo.OpsTask;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -48,9 +50,10 @@ public class MainService {
         log.info("uw-ops-agent starting at: {}", MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath());
 
         //设置系统属性。
+        AtomicInteger threadCounter = new AtomicInteger(0);
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(4, runnable -> {
             Thread thread = new Thread(runnable);
-            thread.setName("service");
+            thread.setName("agent-" + threadCounter.incrementAndGet());
             thread.setDaemon(false);
             return thread;
         });
@@ -61,6 +64,26 @@ public class MainService {
         //每10秒钟检查并处理ops任务。
         scheduledExecutorService.scheduleAtFixedRate(new ProcessOpsTask(), 10, 10, TimeUnit.SECONDS);
         log.info("uw-ops-agent started!");
+    }
+
+    /**
+     * 上报任务结果，必须确保上报成功，否则会出现脱控实例。
+     */
+    private static void reportTaskResult(OpsTask opsTask) {
+        for (int i = 0; i < REPORT_TRY_TIMES; i++) {
+            try {
+                OpsAgentApi.reportTaskResult(opsTask);
+                return;
+            } catch (Throwable e) {
+                log.error("!uw-ops-agent retry report {} times, error message: {}", i, e.getMessage(), e);
+            }
+            try {
+                Thread.sleep(REPORT_TRY_INTERVAL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     /**
@@ -158,11 +181,24 @@ public class MainService {
                                 }
                                 //单独处理agent升级任务，需要线程异步来跑。
                                 if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {
-                                    //对于升级任务，直接设置成功标记。
                                     opsTask.setTaskResult("!!!uw-ops-agent start self updating......");
                                     log.warn(opsTask.getTaskResult());
                                     opsTask.setState(TaskState.STARTING.getValue());
-                                    new Thread(() -> runTaskScript(opsTask)).start();
+                                    CountDownLatch upgradeLatch = new CountDownLatch(1);
+                                    new Thread(() -> {
+                                        try {
+                                            runTaskScript(opsTask);
+                                        } catch (Throwable e) {
+                                            log.error(e.getMessage(), e);
+                                            opsTask.setTaskError(e.getMessage());
+                                            opsTask.setState(TaskState.FAILED.getValue());
+                                        } finally {
+                                            opsTask.setFinishDate(new Date());
+                                            reportTaskResult(opsTask);
+                                            upgradeLatch.countDown();
+                                        }
+                                    }).start();
+                                    upgradeLatch.await();
                                 } else {
                                     runTaskScript(opsTask);
                                     taskSuccess++;
@@ -170,27 +206,18 @@ public class MainService {
                             } catch (Throwable e) {
                                 log.error(e.getMessage(), e);
                                 opsTask.setTaskError(e.getMessage());
-                                opsTask.setState(TaskState.FAIlED.getValue());
+                                opsTask.setState(TaskState.FAILED.getValue());
                             } finally {
-                                opsTask.setFinishDate(new Date());
-                                //执行任务,执行后上报结果，必须确保上报成功，否则会出现脱控实例。
-                                for (int i = 0; i < REPORT_TRY_TIMES; i++) {
-                                    try {
-                                        OpsAgentApi.reportTaskResult(opsTask);
-                                        break;
-                                    } catch (Throwable e) {
-                                        log.error("!uw-ops-agent retry report {} times, error message: {}", i, e.getMessage(), e);
-                                    }
-                                    try {
-                                        Thread.sleep(REPORT_TRY_INTERVAL);
-                                    } catch (InterruptedException e) {
-                                    }
+                                //升级任务已在新线程内完成上报，跳过
+                                if (opsTask.getPlanId() != 0 || opsTask.getInstanceId() != 0 || opsTask.getClusterId() != 0) {
+                                    opsTask.setFinishDate(new Date());
+                                    reportTaskResult(opsTask);
                                 }
                             }
-                            //如果是升级任务，则立即挂起。
+                            //升级任务已完成上报，退出进程，由外部机制(systemd/supervisor)重启新版本。
                             if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {
-                                log.warn("!!!uw-ops-agent run self updating...all task will be halt!");
-                                Thread.sleep(Long.MAX_VALUE);
+                                log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
+                                System.exit(0);
                             }
                         }
                     }
