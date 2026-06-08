@@ -44,8 +44,7 @@ public final class ShellCmdUtils {
      * 运行本地指令。
      */
     public static List<String> runNative(String cmdToRun) {
-        String[] cmd = cmdToRun.split(" ");
-        return runNative(cmd, DEFAULT_ENV, false);
+        return runNative(new String[]{"/bin/sh", "-c", cmdToRun}, DEFAULT_ENV, false);
     }
 
 
