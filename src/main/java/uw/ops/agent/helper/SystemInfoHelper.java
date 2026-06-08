@@ -23,6 +23,7 @@ import uw.ops.agent.vo.sub.*;
 
 import java.net.SocketException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * A demonstration of access to many of OSHI's capabilities
@@ -164,6 +165,9 @@ public class SystemInfoHelper {
         long softirq = ticks[TickType.SOFTIRQ.getIndex()] - prevTicks[TickType.SOFTIRQ.getIndex()];
         long steal = ticks[TickType.STEAL.getIndex()] - prevTicks[TickType.STEAL.getIndex()];
         long totalCpu = user + nice + sys + idle + iowait + irq + softirq + steal;
+        if (totalCpu == 0) {
+            totalCpu = 1;
+        }
         return new CpuStats(cs, in, Math.round(10000 * user / totalCpu) / 100d, Math.round(10000 * nice / totalCpu) / 100d, Math.round(10000 * sys / totalCpu) / 100d, Math.round(10000 * idle / totalCpu) / 100d, Math.round(10000 * iowait / totalCpu) / 100d, Math.round(10000 * irq / totalCpu) / 100d, Math.round(10000 * softirq / totalCpu) / 100d, Math.round(10000 * steal / totalCpu) / 100d);
     }
 
@@ -208,8 +212,6 @@ public class SystemInfoHelper {
             diskStats.setVolume(fs.getVolume());
             diskStats.setUsable(fs.getUsableSpace());
             diskStats.setTotal(fs.getTotalSpace());
-            diskStats.setUsable(fs.getUsableSpace());
-            diskStats.setTotal(fs.getTotalSpace());
         }
         return list;
     }
@@ -220,15 +222,15 @@ public class SystemInfoHelper {
      * @return
      */
     private static List<NetworkStats> getNetworkInterfaceStats(long interval) throws SocketException {
-        List<NetworkIF> prevList = null;
+        Map<String, NetworkIF> prevMap = null;
         if (interval > 0) {
-            prevList = hal.getNetworkIFs(false);
+            prevMap = hal.getNetworkIFs(false).stream()
+                    .collect(Collectors.toMap(NetworkIF::getName, n -> n));
             Util.sleep(interval);
         }
         List<NetworkIF> list = hal.getNetworkIFs(false);
         List<NetworkStats> dataList = new ArrayList<>();
-        for (int i = 0; i < list.size(); i++) {
-            NetworkIF net = list.get(i);
+        for (NetworkIF net : list) {
             // 过滤掉没有ip的网卡
             if (net.getIPv4addr().length == 0) {
                 continue;
@@ -246,13 +248,17 @@ public class SystemInfoHelper {
             networkStats.setMac(net.getMacaddr());
             networkStats.setSpeed(net.getSpeed());
             networkStats.setIndex(net.getIndex());
-            if (interval > 0) {
-                NetworkIF prevNet = prevList.get(i);
-                double timeDiff = (net.getTimeStamp() - prevNet.getTimeStamp()) / 1000d;
-                long txRate = Math.round((net.getBytesSent() - prevNet.getBytesSent()) / timeDiff);
-                long rxRate = Math.round((net.getBytesRecv() - prevNet.getBytesRecv()) / timeDiff);
-                networkStats.setTxRate(txRate);
-                networkStats.setRxRate(rxRate);
+            if (prevMap != null) {
+                NetworkIF prevNet = prevMap.get(netName);
+                if (prevNet != null) {
+                    double timeDiff = (net.getTimeStamp() - prevNet.getTimeStamp()) / 1000d;
+                    if (timeDiff > 0) {
+                        long txRate = Math.round((net.getBytesSent() - prevNet.getBytesSent()) / timeDiff);
+                        long rxRate = Math.round((net.getBytesRecv() - prevNet.getBytesRecv()) / timeDiff);
+                        networkStats.setTxRate(txRate);
+                        networkStats.setRxRate(rxRate);
+                    }
+                }
             }
             dataList.add(networkStats);
         }
@@ -277,7 +283,7 @@ public class SystemInfoHelper {
             } else if (line.startsWith("SYN-SENT")) {
                 is.setSynSent(Integer.parseInt(line.substring(9)));
             } else if (line.startsWith("SYN-RECV")) {
-                is.setSynSent(Integer.parseInt(line.substring(9)));
+                is.setSynRecv(Integer.parseInt(line.substring(9)));
             }
         }
         return is;
@@ -337,7 +343,7 @@ public class SystemInfoHelper {
                 ds.setDiskRead(parseKMGTData(blocks[1].trim()));
                 String[] nets = cmd.getNetIO().split("/");
                 ds.setNetworkIn(parseKMGTData(nets[0].trim()));
-                ds.setNetworkIn(parseKMGTData(nets[1].trim()));
+                ds.setNetworkOut(parseKMGTData(nets[1].trim()));
                 ds.setPidCount(Integer.parseInt(cmd.getPIDs()));
             }
         } catch (Exception e) {

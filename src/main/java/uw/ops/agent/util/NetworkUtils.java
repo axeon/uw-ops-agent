@@ -48,39 +48,27 @@ public class NetworkUtils {
     }
 
     /**
-     * 根据输入端口号，递增递归查询可使用端口
+     * 根据输入端口号，递增查询可使用端口
      *
      * @param port 端口号
-     * @return 如果被占用，递归；否则返回可使用port
+     * @return 可用端口
      */
     public static int getUsablePort(int port) throws IOException {
-        //先检测端口缓存。
-        boolean flag = checkPortCache(port);
-        if (flag) {
-            port = port + 1;
-            return getUsablePort(port);
-        }
-        //实际端口检测。
-        ServerSocket socket = null;
-        try {
-            socket = new ServerSocket();
-            socket.bind(new InetSocketAddress(port));
-        } catch (IOException e) {
-            flag = true;
-            //如果测试端口号没有被占用，那么会抛出异常，通过下文flag来返回可用端口
-        } finally {
-            if (socket != null) {
-                socket.close();
+        while (port <= 65535) {
+            //先检测端口缓存。
+            if (checkPortCache(port)) {
+                port++;
+                continue;
+            }
+            //实际端口检测。
+            try (ServerSocket socket = new ServerSocket()) {
+                socket.bind(new InetSocketAddress(port));
+                return port;
+            } catch (IOException e) {
+                port++;
             }
         }
-        if (flag) {
-            //端口被占用，port + 1递归
-            port = port + 1;
-            return getUsablePort(port);
-        } else {
-            //可用端口
-            return port;
-        }
+        throw new IOException("No available port found");
     }
 
 }
