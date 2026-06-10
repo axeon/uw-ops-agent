@@ -11,15 +11,39 @@ jobs:
     steps:
       - name: build
         run: |
-          # 拉取代码并构建
+          # 拉取代码
           source ~/.profile
           GIT_SERVER=${{gitea.server_url}}
           git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository}}.git .
-          mvn clean package -U -Dmaven.test.skip=true
-          # 上传ops-center项目，并出发ci构建
-          cp -f target/ops-agent uw-ops-center/src/main/resources/public/agent/download/
+
+          mkdir -p output
+
+          # 注册QEMU多架构支持（如已注册则跳过）
+          [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ] || docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+
+          # 构建amd64（通过GraalVM amd64容器）
+          echo "Building amd64..."
+          docker run --rm --platform linux/amd64 -v $(pwd):/build -w /build ghcr.io/graalvm/native-image-community:25 \
+            mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true
+          cp target/ops-agent output/ops-agent-amd64
+
+          # 构建arm64（通过QEMU + GraalVM arm64容器）
+          echo "Building arm64..."
+          rm -rf target
+          docker run --rm --platform linux/arm64 -v $(pwd):/build -w /build ghcr.io/graalvm/native-image-community:25 \
+            mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true
+          cp target/ops-agent output/ops-agent-arm64
+
+          # 验证产物
+          file output/ops-agent-amd64
+          file output/ops-agent-arm64
+
+          # 复制到ops-center并提交
+          git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository_owner}}/uw-ops-center.git uw-ops-center
+          cp -f output/ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-amd64
+          cp -f output/ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-arm64
           cd uw-ops-center
-          git add src/main/resources/public/agent/download/ops-agent
-          git commit -m "ops-agent ci auto build"
+          git add src/main/resources/public/agent/download/
+          git commit -m "ops-agent ci auto build (amd64+arm64)"
           git push origin main
           echo "ops-agent build success!"
