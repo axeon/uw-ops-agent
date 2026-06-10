@@ -18,21 +18,29 @@ jobs:
 
           mkdir -p output
 
-          # 注册QEMU多架构支持（如已注册则跳过）
+          # Step 1: 打包fat JAR（包含所有依赖和native-image配置）
+          echo "Building fat JAR..."
+          mvn -B package -Dmaven.test.skip=true
+          FAT_JAR=$(ls target/ops-agent-*.jar | head -1)
+
+          # 注册QEMU多架构支持
           [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ] || docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
-          # 构建amd64（通过GraalVM amd64容器）
+          # Step 2-amd64: native-image容器编译
           echo "Building amd64..."
-          docker run --rm --platform linux/amd64 -v $(pwd):/build -w /build --entrypoint sh ghcr.io/graalvm/native-image-community:25 \
-            -c "mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true"
-          cp target/ops-agent output/ops-agent-amd64
+          docker run --rm --platform linux/amd64 \
+            -v $(pwd):/build -w /build \
+            ghcr.io/graalvm/native-image-community:25 \
+            --no-fallback -Os --compact-strings --strip-debug-info \
+            -o output/ops-agent-amd64 -jar "$FAT_JAR"
 
-          # 构建arm64（通过QEMU + GraalVM arm64容器）
+          # Step 3-arm64: native-image容器编译
           echo "Building arm64..."
-          rm -rf target
-          docker run --rm --platform linux/arm64 -v $(pwd):/build -w /build --entrypoint sh ghcr.io/graalvm/native-image-community:25 \
-            -c "mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true"
-          cp target/ops-agent output/ops-agent-arm64
+          docker run --rm --platform linux/arm64 \
+            -v $(pwd):/build -w /build \
+            ghcr.io/graalvm/native-image-community:25 \
+            --no-fallback -Os --compact-strings --strip-debug-info \
+            -o output/ops-agent-arm64 -jar "$FAT_JAR"
 
           # 验证产物
           file output/ops-agent-amd64
