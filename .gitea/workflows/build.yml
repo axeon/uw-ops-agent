@@ -21,7 +21,7 @@ jobs:
           # Step 1: 打包fat JAR（包含所有依赖和native-image配置）
           echo "Building fat JAR..."
           mvn -B package -Dmaven.test.skip=true
-          FAT_JAR=$(ls target/ops-agent-*.jar | head -1)
+          FAT_JAR=$(ls target/uw-ops-agent-*.jar | head -1)
 
           # 注册QEMU多架构支持
           [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ] || docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
