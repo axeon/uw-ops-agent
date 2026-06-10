@@ -31,28 +31,28 @@ jobs:
           docker run --rm --platform linux/amd64 \
             -v $(pwd):/build -w /build \
             ghcr.io/graalvm/native-image-community:25 \
-            --no-fallback -Os --compact-strings --strip-debug-info \
-            -o output/ops-agent-amd64 -jar "$FAT_JAR"
+            --no-fallback -Os --compact-strings \
+            -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
 
           # Step 3-arm64: native-image容器编译
           echo "Building arm64..."
           docker run --rm --platform linux/arm64 \
             -v $(pwd):/build -w /build \
             ghcr.io/graalvm/native-image-community:25 \
-            --no-fallback -Os --compact-strings --strip-debug-info \
-            -o output/ops-agent-arm64 -jar "$FAT_JAR"
+            --no-fallback -Os --compact-strings \
+            -o output/uw-ops-agent-arm64 -jar "$FAT_JAR"
 
           # 验证产物
-          file output/ops-agent-amd64
-          file output/ops-agent-arm64
+          file output/uw-ops-agent-amd64
+          file output/uw-ops-agent-arm64
 
           # 复制到ops-center并提交
           git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository_owner}}/uw-ops-center.git uw-ops-center
-          cp -f output/ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-amd64
-          cp -f output/ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-arm64
-          cp -f "$FAT_JAR" uw-ops-center/src/main/resources/public/agent/download/ops-agent.jar
+          cp -f output/uw-ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-amd64
+          cp -f output/uw-ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-arm64
+          cp -f "$FAT_JAR" uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent.jar
           cd uw-ops-center
           git add src/main/resources/public/agent/download/
-          git commit -m "ops-agent ci auto build (amd64+arm64)"
+          git commit -m "uw-ops-agent ci auto build (amd64+arm64)"
           git push origin main
-          echo "ops-agent build success!"
+          echo "uw-ops-agent build success!"
