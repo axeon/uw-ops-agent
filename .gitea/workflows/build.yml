@@ -50,6 +50,7 @@ jobs:
           git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository_owner}}/uw-ops-center.git uw-ops-center
           cp -f output/ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-amd64
           cp -f output/ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/ops-agent-arm64
+          cp -f "$FAT_JAR" uw-ops-center/src/main/resources/public/agent/download/ops-agent.jar
           cd uw-ops-center
           git add src/main/resources/public/agent/download/
           git commit -m "ops-agent ci auto build (amd64+arm64)"
