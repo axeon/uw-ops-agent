@@ -31,7 +31,7 @@ jobs:
           docker run --rm --platform linux/amd64 \
             -v $(pwd):/build -w /build \
             container-registry.oracle.com/graalvm/native-image:25 \
-            --no-fallback -Os --strip-debug-info --compact-strings \
+            --no-fallback -Os -march=compatibility --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
             -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
 
           # Step 3-arm64: native-image容器编译
@@ -39,7 +39,7 @@ jobs:
           docker run --rm --platform linux/arm64 \
             -v $(pwd):/build -w /build \
             container-registry.oracle.com/graalvm/native-image:25 \
-            --no-fallback -Os --strip-debug-info --compact-strings \
+            --no-fallback -Os -march=compatibility --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
             -o output/uw-ops-agent-arm64 -jar "$FAT_JAR"
 
           # 验证产物
