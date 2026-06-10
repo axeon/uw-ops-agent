@@ -11,12 +11,12 @@ jobs:
     steps:
       - name: build
         run: |
-          git config --global user.token ${{ gitea.token }}
-          git config --global user.email "23231269@qq.com"
-          git clone -q ${{gitea.server_url}}/${{ gitea.repository }}.git .
-          git clone -q ${{gitea.server_url}}/uw/uw-ops-center.git
+          # 拉取代码并构建
           source ~/.profile
+          GIT_SERVER=${{gitea.server_url}}
+          git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository}}.git .
           mvn clean package -U -Dmaven.test.skip=true
+          # 上传ops-center项目，并出发ci构建
           cp -f target/ops-agent uw-ops-center/src/main/resources/public/agent/download/
           cd uw-ops-center
           git add src/main/resources/public/agent/download/ops-agent
