@@ -3,7 +3,7 @@ package uw.ops.agent;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import uw.common.dto.ResponseData;
+import uw.common.response.ResponseData;
 import uw.common.util.HmacUtils;
 import uw.common.util.SystemClock;
 import uw.ops.agent.api.OpsAgentApi;
