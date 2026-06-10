@@ -30,16 +30,16 @@ jobs:
           echo "Building amd64..."
           docker run --rm --platform linux/amd64 \
             -v $(pwd):/build -w /build \
-            ghcr.io/graalvm/native-image-community:25 \
-            --no-fallback -Os --compact-strings \
+            container-registry.oracle.com/graalvm/native-image:25 \
+            --no-fallback -Os --strip-debug-info --compact-strings \
             -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
 
           # Step 3-arm64: native-image容器编译
           echo "Building arm64..."
           docker run --rm --platform linux/arm64 \
             -v $(pwd):/build -w /build \
-            ghcr.io/graalvm/native-image-community:25 \
-            --no-fallback -Os --compact-strings \
+            container-registry.oracle.com/graalvm/native-image:25 \
+            --no-fallback -Os --strip-debug-info --compact-strings \
             -o output/uw-ops-agent-arm64 -jar "$FAT_JAR"
 
           # 验证产物
@@ -47,7 +47,7 @@ jobs:
           file output/uw-ops-agent-arm64
 
           # 复制到ops-center并提交
-          git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/${{gitea.repository_owner}}/uw-ops-center.git uw-ops-center
+          git clone -q ${GIT_SERVER%%://*}://${GIT_SERVER#*://}/uw/uw-ops-center.git uw-ops-center
           cp -f output/uw-ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-amd64
           cp -f output/uw-ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-arm64
           cp -f "$FAT_JAR" uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent.jar
