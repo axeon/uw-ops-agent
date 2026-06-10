@@ -23,15 +23,15 @@ jobs:
 
           # 构建amd64（通过GraalVM amd64容器）
           echo "Building amd64..."
-          docker run --rm --platform linux/amd64 -v $(pwd):/build -w /build ghcr.io/graalvm/native-image-community:25 \
-            mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true
+          docker run --rm --platform linux/amd64 -v $(pwd):/build -w /build --entrypoint sh ghcr.io/graalvm/native-image-community:25 \
+            -c "mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true"
           cp target/ops-agent output/ops-agent-amd64
 
           # 构建arm64（通过QEMU + GraalVM arm64容器）
           echo "Building arm64..."
           rm -rf target
-          docker run --rm --platform linux/arm64 -v $(pwd):/build -w /build ghcr.io/graalvm/native-image-community:25 \
-            mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true
+          docker run --rm --platform linux/arm64 -v $(pwd):/build -w /build --entrypoint sh ghcr.io/graalvm/native-image-community:25 \
+            -c "mvn -B package -Dmaven.test.skip=true -DskipNativeTests=true"
           cp target/ops-agent output/ops-agent-arm64
 
           # 验证产物
