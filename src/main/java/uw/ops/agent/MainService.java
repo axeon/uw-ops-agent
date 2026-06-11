@@ -126,8 +126,8 @@ public class MainService {
      */
     private static void runTaskScript(OpsTask opsTask) {
         log.info("Shell command execute: \n{}", opsTask.getTaskScript());
-        List<String> datalist = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", opsTask.getTaskScript()}, null, true);
-        opsTask.setTaskResult(StringUtils.join(datalist, "\n"));
+        List<String> cmdlist = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", opsTask.getTaskScript()}, null, true);
+        opsTask.setTaskResult(StringUtils.join(cmdlist, "\n"));
         log.info("Shell receive results: \n{}", opsTask.getTaskResult());
         opsTask.setState(TaskState.SUCCEED.getValue());
     }
