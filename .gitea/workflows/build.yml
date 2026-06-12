@@ -33,7 +33,7 @@ jobs:
             container-registry.oracle.com/graalvm/native-image:25 \
             --no-fallback -Os --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
             -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
-#
+
 #          # Step 3-arm64: native-image容器编译
 #          echo "Building arm64..."
 #          docker run --rm --platform linux/arm64 \
