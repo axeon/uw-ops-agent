@@ -1,0 +1,13 @@
+{
+  "resources": {
+    "includes": [
+      {"pattern": "META-INF/services/*"},
+      {"pattern": "com/sun/jna/linux-x86-64/libjnidispatch.so"},
+      {"pattern": "com/sun/jna/linux-aarch64/libjnidispatch.so"},
+      {"pattern": "oshi.properties"},
+      {"pattern": "simplelogger.properties"},
+      {"pattern": "jdk/internal/icu/impl/data/icudt72b/*"},
+      {"pattern": "sun/net/idn/*"}
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+[
+  [
+    "com.sun.jna.platform.linux.LibC"
+  ],
+  [
+    "com.sun.jna.platform.linux.Udev"
+  ],
+  [
+    "oshi.jna.platform.linux.LinuxLibc"
+  ]
+]

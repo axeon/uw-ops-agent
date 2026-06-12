@@ -32,6 +32,7 @@ jobs:
             -v $(pwd):/build -w /build \
             container-registry.oracle.com/graalvm/native-image:25 \
             --no-fallback -Os --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
+            -H:ConfigurationFileDirectories=src/main/resources/META-INF/native-image/config \
             -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
 
           # Step 3-arm64: native-image容器编译
@@ -40,6 +41,7 @@ jobs:
           #   -v $(pwd):/build -w /build \
           #   container-registry.oracle.com/graalvm/native-image:25 \
           #   --no-fallback -Os --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
+          #   -H:ConfigurationFileDirectories=src/main/resources/META-INF/native-image/config \
           #   -o output/uw-ops-agent-arm64 -jar "$FAT_JAR"
 
           # 验证产物
