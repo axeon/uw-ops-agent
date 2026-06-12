@@ -47,7 +47,7 @@ jobs:
           # file output/uw-ops-agent-arm64
 
           # 复制到ops-center并提交
-          git clone -q ${GIT_SERVER%%://*}://${GIT_SERVER#*://}/uw/uw-ops-center.git
+          git clone -q ${GIT_SERVER%%://*}://gitea:${{gitea.token}}@${GIT_SERVER#*://}/uw/uw-ops-center.git
           cp -f output/uw-ops-agent-amd64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-amd64
           # cp -f output/uw-ops-agent-arm64 uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent-arm64
           cp -f "$FAT_JAR" uw-ops-center/src/main/resources/public/agent/download/uw-ops-agent.jar
