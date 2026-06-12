@@ -18,7 +18,7 @@ jobs:
 
           mkdir -p output
 
-          # Step 1: 打包fat JAR（包含所有依赖和native-image配置）
+          # Step 1: 打包fat JAR
           echo "Building fat JAR..."
           mvn -B package -Dmaven.test.skip=true
           FAT_JAR=$(ls target/uw-ops-agent-*.jar | head -1)
