@@ -32,7 +32,7 @@
         <dependency>
             <groupId>com.umtone</groupId>
             <artifactId>uw-common</artifactId>
-            <version>1.1.95</version>
+            <version>1.1.100</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
