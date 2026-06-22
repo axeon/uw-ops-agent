@@ -103,6 +103,8 @@ public class MainService {
 
     /**
      * 上报任务结果，必须确保上报成功，否则会出现脱控实例。
+     * 若上报过程中主机被 Center disable(OpsAgentApi 检测到 host-disabled 会清空本地 secret)，
+     * 则立即停止重试——继续重试只会收到同样的 host-disabled 响应，无意义且阻塞调度。
      */
     private static void reportTaskResult(OpsTask opsTask) {
         for (int i = 0; i < REPORT_TRY_TIMES; i++) {
@@ -111,6 +113,11 @@ public class MainService {
                 return;
             } catch (Throwable e) {
                 log.error("!uw-ops-agent retry report {} times, error message: {}", i, e.getMessage(), e);
+            }
+            // secret 被清空说明主机已被 Center disable，停止重试。
+            if (StringUtils.isBlank(SecretStore.load())) {
+                log.warn("agent secret cleared during reportTaskResult (host disabled), stop retrying.");
+                return;
             }
             try {
                 Thread.sleep(REPORT_TRY_INTERVAL);
@@ -326,15 +333,4 @@ public class MainService {
         }
     }
 
-//    /**
-//     * 删除自身，并退出。
-//     */
-//    public static void deleteAndExitSelf() {
-//        String self = MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath().trim();
-//        //必须增加必要的判定，再去删除文件。
-//        if (StringUtils.isNotBlank(self) && !self.contains(" ") && !self.equals("/")) {
-//            ShellCmdUtils.runNative("rm -f " + self);
-//        }
-//        System.exit(0);
-//    }
 }

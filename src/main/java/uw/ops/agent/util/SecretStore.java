@@ -112,6 +112,21 @@ public final class SecretStore {
     }
 
     /**
+     * 清空密钥：删除本地密钥文件并清空内存缓存。
+     * 用于 Center 下发 host-disabled 标记(主机被禁用)时，Agent 回到无密钥初始态，
+     * 停止拉取任务，等待 Center 重新审核后再次领取。
+     */
+    public static synchronized void clear() {
+        cachedSecret = null;
+        try {
+            java.nio.file.Files.deleteIfExists(SECRET_PATH);
+            log.info("agent secret cleared (host disabled by center).");
+        } catch (IOException e) {
+            log.error("clear agent secret failed: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
      * 清除内存缓存(强制下次 load 重新读盘，主要用于测试或重置)。
      */
     static synchronized void clearCache() {

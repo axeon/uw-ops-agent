@@ -42,6 +42,9 @@ public final class ShellCmdUtils {
 
     /**
      * 运行本地指令。
+     *
+     * @param cmdToRun 待执行的 shell 指令
+     * @return 输出行列表
      */
     public static List<String> runNative(String cmdToRun) {
         return runNative(new String[]{"/bin/sh", "-c", cmdToRun}, DEFAULT_ENV, false);
@@ -154,6 +157,13 @@ public final class ShellCmdUtils {
         return infoList;
     }
 
+    /**
+     * 读取进程输出流为行列表(用于 runNative 的 stdout/stderr 读取)。
+     *
+     * @param is  进程输入流
+     * @param cmd  关联的指令(仅用于异常日志)
+     * @return 输出行列表
+     */
     private static List<String> getProcessOutput(InputStream is, String[] cmd) {
         ArrayList<String> sa = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
