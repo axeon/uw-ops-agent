@@ -10,6 +10,9 @@ import java.net.ServerSocket;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 网络端口工具。用于在指定端口被占用时自动寻找下一个可用端口，支持短时缓存避免重复探测。
+ */
 public class NetworkUtils {
 
 

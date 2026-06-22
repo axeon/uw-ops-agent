@@ -26,7 +26,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * A demonstration of access to many of OSHI's capabilities
+ * 系统信息采集助手。基于 OSHI 采集主机硬件信息(CPU/内存/磁盘/网络/文件系统)与 Docker 容器状态，供 Agent 上报使用。
  */
 public class SystemInfoHelper {
 

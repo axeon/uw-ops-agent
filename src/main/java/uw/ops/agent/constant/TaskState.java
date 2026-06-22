@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 
 /**
- * 容器状态
+ * 任务状态。
  */
 @JsonFormat(shape = JsonFormat.Shape.OBJECT)
 public enum TaskState {

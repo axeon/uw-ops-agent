@@ -77,8 +77,23 @@ public final class ShellCmdUtils {
      * @return
      */
     public static List<String> runNative(String[] cmdToRunWithArgs, Map<String, String> envMap, boolean redirectErrorStream) {
+        return runNative(cmdToRunWithArgs, envMap, redirectErrorStream, 0);
+    }
+
+    /**
+     * 运行数组参数的指令，带超时控制(毫秒，0表示不超时)。
+     * 超时后会 destroy 子进程并抛出异常，防止脚本 hang 住拖垮调度线程。
+     *
+     * @param cmdToRunWithArgs
+     * @param envMap
+     * @param redirectErrorStream
+     * @param timeoutMillis
+     * @return
+     */
+    public static List<String> runNative(String[] cmdToRunWithArgs, Map<String, String> envMap, boolean redirectErrorStream, long timeoutMillis) {
         Process process = null;
         List<String> infoList = null, errorList = null;
+        boolean timedOut = false;
         try {
             ProcessBuilder pb = new ProcessBuilder(cmdToRunWithArgs);
             if (envMap != null) {
@@ -90,7 +105,13 @@ public final class ShellCmdUtils {
             if (redirectErrorStream) {
                 errorList = getProcessOutput(process.getErrorStream(), cmdToRunWithArgs);
             }
-            process.waitFor();
+            if (timeoutMillis > 0) {
+                if (!process.waitFor(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    timedOut = true;
+                }
+            } else {
+                process.waitFor();
+            }
         } catch (Throwable e) {
             String errorInfo = "Couldn't run command:" + Arrays.toString(cmdToRunWithArgs) + ". Exception info: " + e.getMessage();
             log.error(errorInfo, e);
@@ -98,6 +119,10 @@ public final class ShellCmdUtils {
         } finally {
             // Ensure all resources are released
             if (process != null) {
+                // 超时或异常时强制终止进程树，避免僵尸进程。
+                if (timedOut || process.isAlive()) {
+                    process.destroyForcibly();
+                }
                 // Windows and Solaris don't close descriptors on destroy,
                 // so we must handle separately
                 if (Platform.isWindows() || Platform.isSolaris()) {
@@ -119,6 +144,9 @@ public final class ShellCmdUtils {
                 }
                 process.destroy();
             }
+        }
+        if (timedOut) {
+            throw new RuntimeException("Command timed out after " + timeoutMillis + "ms: " + Arrays.toString(cmdToRunWithArgs));
         }
         if (errorList != null && errorList.size() > 0) {
             throw new RuntimeException("Error Message: " + StringUtils.join(errorList, "\n"));
