@@ -1,6 +1,6 @@
 package uw.ops.agent.api;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.type.TypeReference;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
