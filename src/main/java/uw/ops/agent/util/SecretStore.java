@@ -4,11 +4,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.HashSet;
 import java.util.Set;
@@ -16,7 +18,7 @@ import java.util.Set;
 /**
  * Agent 鉴权密钥本地存储。
  * <p>
- * 密钥文件 /etc/uw-ops-agent/agent.secret，权限 0400 owner=root。
+ * 密钥文件 /etc/uw-ops-agent/agent.secret，权限 0600 owner=root。
  * 写入采用 原子 rename(tmp -> target)，避免半写状态。
  * 可通过环境变量 OPS_AGENT_SECRET_FILE 覆盖路径(便于测试)。
  */
@@ -82,19 +84,32 @@ public final class SecretStore {
      * 先写 tmp 文件、fsync、设置权限、再 rename 到目标路径。
      *
      * @param secret 密钥明文
+     * @return 保存成功返回 true
      */
-    public static synchronized void save(String secret) {
+    public static synchronized boolean save(String secret) {
         if (secret == null || secret.isEmpty()) {
-            return;
+            return false;
         }
+        if (!writeSecret(SECRET_PATH, secret)) {
+            return false;
+        }
+        cachedSecret = secret;
+        log.info("agent secret saved.");
+        return true;
+    }
+
+    static boolean writeSecret(Path secretPath, String secret) {
+        Path tmp = secretPath.resolveSibling(secretPath.getFileName() + ".tmp");
         try {
-            Path parent = SECRET_PATH.getParent();
+            Path parent = secretPath.getParent();
             if (parent != null && !Files.exists(parent)) {
                 Files.createDirectories(parent);
             }
-            Path tmp = SECRET_PATH.resolveSibling(SECRET_PATH.getFileName() + ".tmp");
             byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
             Files.write(tmp, bytes);
+            try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
             try {
                 Set<PosixFilePermission> perms = new HashSet<>();
                 perms.add(PosixFilePermission.OWNER_READ);
@@ -103,11 +118,16 @@ public final class SecretStore {
             } catch (UnsupportedOperationException e) {
                 // 非POSIX文件系统(如Windows测试环境)，跳过权限设置。
             }
-            Files.move(tmp, SECRET_PATH, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-            cachedSecret = secret;
-            log.info("agent secret saved.");
+            Files.move(tmp, secretPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            return true;
         } catch (IOException e) {
             log.error("save agent secret failed: {}", e.getMessage(), e);
+            try {
+                Files.deleteIfExists(tmp);
+            } catch (IOException cleanupError) {
+                log.warn("cleanup agent secret temp file failed: {}", cleanupError.getMessage());
+            }
+            return false;
         }
     }
 

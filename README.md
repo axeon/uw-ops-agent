@@ -21,7 +21,7 @@ Agent 启动后通过环境变量 `OPS_CENTER_HOST` 连接 center，流程：
 1. Agent 上报 `uploadHostInfo` 注册主机（state=INIT，无密钥）
 2. 运维在 center 控制台审核通过（enable）：center **生成 per-host `agentSecret` 存入 DB**，并标记 `secret_delivered=0`（等待 Agent 领取）、`auth_version=1`
 3. Agent 下一次 `uploadHostStats` 请求（携带身份头但无签名），center 检测 `secret_delivered=0` → 通过响应头 `X-Agent-Secret` **一次性下发** DB 中那个 secret，并置 `secret_delivered=1`
-4. Agent 落盘 secret 到 `/etc/uw-ops-agent/agent.secret`（权限 0400），后续所有请求携带上行签名头
+4. Agent 落盘 secret 到 `/etc/uw-ops-agent/agent.secret`（权限 0600），后续所有请求携带上行签名头
 
 上行请求头（`uploadHostStats` / `getTaskList` / `reportTaskResult`）：
 
@@ -63,7 +63,7 @@ Agent 据此**自动清空本地 secret** 并停止拉取任务（`ProcessOpsTas
 
 - **无 secret 不执行任何任务**：`ProcessOpsTask` 检测到本地无 secret 时跳过任务拉取，`verifyTaskSign` 无 secret 时直接抛异常
 - **危险命令拦截**：`ShellRiskChecker` 用正则黑名单拦截 `rm -rf /`、`mkfs`、`dd` 写裸盘、fork bomb、关机、覆写 `/etc/passwd` 等破坏性命令（辅助防线，挡误操作，不挡对抗）
-- **任务执行超时**：普通任务 10 分钟、升级任务 5 分钟超时，超时 `destroyForcibly` 子进程，防止脚本 hang 拖垮调度线程
+- **任务执行约束**：普通任务 10 分钟、升级任务 5 分钟超时；超时终止进程树，非零退出码按失败上报
 - **升级任务排序**：同批次任务里升级任务排到最后执行，避免其 `System.exit` 丢弃后续任务
 
 ## 配置
@@ -102,18 +102,25 @@ mvn clean package        # 生成 fat jar
 # 或用 GraalVM native-image 编译原生二进制（见 .gitea/workflows/build.yml）
 ```
 
+CI 使用 Oracle GraalVM Java 25 的浮动镜像标签 `container-registry.oracle.com/graalvm/native-image:25`；构建期 Feature API 当前依赖 `25.3.4.1`。两个架构均使用 `-march=compatibility`，避免默认 x86-64-v3/armv8.1-a 指令集限制；操作系统和 glibc 兼容性仍由构建镜像决定。
+
 ### native-image 配置采集（开发用）
 
-在参考机器上跑一次 agent，用 native-image-agent 采集反射/资源配置：
+原生元数据统一使用 schema v1.2.0 的 `META-INF/native-image/com.umtone/uw-ops-agent/reachability-metadata.json`，由 classpath 自动发现，不再传递 `-H:ConfigurationFileDirectories`。该文件集中维护第三方反射、JNI、动态代理和资源配置。
+
+应用自身 `uw.ops.agent.vo` 下的 JSON 模型由 `AgentReflectionFeature` 在镜像构建期扫描，自动注册类、数组、构造器、方法和字段。新增模型或 setter 无需手工修改元数据。构建产物会执行 `--verify-native-metadata`，覆盖 JSON、HMAC、TLS、资源以及 Linux JNA/OSHI 路径；tracing agent 未覆盖的动态路径仍需人工验证。
+
+JNA、加密实现等第三方库仍使用 tracing agent 采集元数据。在每个目标架构的 Debian 12 环境分别运行：
 
 ```sh
-java -agentlib:native-image-agent=config-output-dir=./src/main/resources/META-INF/native-image/config \
-     -jar target/uw-ops-agent-1.2.0.jar
+ARCH=$(uname -m)
+java -agentlib:native-image-agent=config-output-dir=target/native-metadata/${ARCH} \
+     -jar target/uw-ops-agent-1.2.0.jar --verify-native-metadata
 ```
 
-> 当前 `src/main/resources/META-INF/native-image/config/` 下的配置是在 Dell R720 + Rocky Linux 9 上采集的，其它机型可能需要重新采集。
+> 当前 `reachability-metadata.json` 已于 2026-09-03 使用 GraalVM CE 25.3.4.1 / JDK 25.0.4.1，在 Debian 12 的 linux/arm64 与 linux/amd64 环境分别采集并取并集。两份结果仅 JNA 本地库资源路径不同，最终文件同时保留 `linux-aarch64` 和 `linux-x86-64` 资源。
 
-> ⚠️ **升级 oshi 主版本后必须重新采集**：oshi 内部的 JNA 包装类（如 `oshi.jna.Struct$CloseableSysinfo`）在不同主版本之间不保证类名稳定，旧配置在 7.x 构建时可能报 class not found。6.8.2 → 7.3.1 这次升级后请务必跑一遍上面的 agent 命令重新生成 4 个 config 文件，再 diff 确认变化点。
+> ⚠️ **升级 GraalVM、JDK、OSHI 或 JNA 后必须在两个目标架构重新采集**。`config-output-dir` 会保留两份独立结果；review 架构差异后再取并集，不要直接覆盖正式文件。
 
 ## 运行模型
 

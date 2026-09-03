@@ -11,7 +11,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * shell命令工具类。
@@ -21,6 +32,22 @@ public final class ShellCmdUtils {
     private static final Logger log = LoggerFactory.getLogger(ShellCmdUtils.class);
 
     private static final Map<String, String> DEFAULT_ENV = getDefaultEnv();
+    /** 主调度池最多并发四个任务，每条命令最多需要两个输出读取器。 */
+    private static final int OUTPUT_READER_POOL_SIZE = 8;
+    private static final long OUTPUT_READER_KEEP_ALIVE_MINUTES = 5;
+    private static final AtomicInteger OUTPUT_READER_THREAD_COUNTER = new AtomicInteger();
+    private static final ExecutorService OUTPUT_READER_EXECUTOR = new ThreadPoolExecutor(
+            0,
+            OUTPUT_READER_POOL_SIZE,
+            OUTPUT_READER_KEEP_ALIVE_MINUTES,
+            TimeUnit.MINUTES,
+            new SynchronousQueue<>(),
+            runnable -> {
+                Thread thread = new Thread(runnable,
+                        "shell-output-reader-" + OUTPUT_READER_THREAD_COUNTER.incrementAndGet());
+                thread.setDaemon(true);
+                return thread;
+            });
 
     private ShellCmdUtils() {
     }
@@ -39,17 +66,6 @@ public final class ShellCmdUtils {
         }
         return envMap;
     }
-
-    /**
-     * 运行本地指令。
-     *
-     * @param cmdToRun 待执行的 shell 指令
-     * @return 输出行列表
-     */
-    public static List<String> runNative(String cmdToRun) {
-        return runNative(new String[]{"/bin/sh", "-c", cmdToRun}, DEFAULT_ENV, false);
-    }
-
 
     /**
      * 运行数组参数的指令，使用默认环境变量，不重定向错误流。
@@ -85,7 +101,7 @@ public final class ShellCmdUtils {
 
     /**
      * 运行数组参数的指令，带超时控制(毫秒，0表示不超时)。
-     * 超时后会 destroy 子进程并抛出异常，防止脚本 hang 住拖垮调度线程。
+     * 超时后会终止子进程树并抛出异常，防止脚本 hang 住拖垮调度线程。
      *
      * @param cmdToRunWithArgs
      * @param envMap
@@ -95,8 +111,8 @@ public final class ShellCmdUtils {
      */
     public static List<String> runNative(String[] cmdToRunWithArgs, Map<String, String> envMap, boolean redirectErrorStream, long timeoutMillis) {
         Process process = null;
-        List<String> infoList = null, errorList = null;
-        boolean timedOut = false;
+        Future<List<String>> stdoutFuture = null;
+        Future<List<String>> stderrFuture = null;
         try {
             ProcessBuilder pb = new ProcessBuilder(cmdToRunWithArgs);
             if (envMap != null) {
@@ -104,57 +120,93 @@ public final class ShellCmdUtils {
             }
             pb.redirectErrorStream(redirectErrorStream);
             process = pb.start();
-            infoList = getProcessOutput(process.getInputStream(), cmdToRunWithArgs);
-            if (redirectErrorStream) {
-                errorList = getProcessOutput(process.getErrorStream(), cmdToRunWithArgs);
+
+            Process runningProcess = process;
+            stdoutFuture = OUTPUT_READER_EXECUTOR.submit(
+                    () -> getProcessOutput(runningProcess.getInputStream(), cmdToRunWithArgs));
+            stderrFuture = redirectErrorStream ? null : OUTPUT_READER_EXECUTOR.submit(
+                    () -> getProcessOutput(runningProcess.getErrorStream(), cmdToRunWithArgs));
+
+            boolean completed = timeoutMillis > 0
+                    ? process.waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
+                    : waitWithoutTimeout(process);
+            if (!completed) {
+                terminateProcessTree(process);
+                throw new RuntimeException("Command timed out after " + timeoutMillis + "ms: " + Arrays.toString(cmdToRunWithArgs));
             }
-            if (timeoutMillis > 0) {
-                if (!process.waitFor(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                    timedOut = true;
-                }
-            } else {
-                process.waitFor();
+
+            List<String> stdout = awaitOutput(stdoutFuture, cmdToRunWithArgs);
+            List<String> stderr = stderrFuture == null ? List.of() : awaitOutput(stderrFuture, cmdToRunWithArgs);
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                List<String> errorOutput = redirectErrorStream ? stdout : stderr;
+                throw new RuntimeException("Command exited with code " + exitCode + ": "
+                        + Arrays.toString(cmdToRunWithArgs) + formatOutput(errorOutput));
             }
-        } catch (Throwable e) {
+            return stdout;
+        } catch (IOException e) {
             String errorInfo = "Couldn't run command:" + Arrays.toString(cmdToRunWithArgs) + ". Exception info: " + e.getMessage();
             log.error(errorInfo, e);
-            throw new RuntimeException(errorInfo);
+            throw new RuntimeException(errorInfo, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Command interrupted: " + Arrays.toString(cmdToRunWithArgs), e);
         } finally {
-            // Ensure all resources are released
             if (process != null) {
-                // 超时或异常时强制终止进程树，避免僵尸进程。
-                if (timedOut || process.isAlive()) {
-                    process.destroyForcibly();
+                if (process.isAlive()) {
+                    terminateProcessTree(process);
                 }
-                // Windows and Solaris don't close descriptors on destroy,
-                // so we must handle separately
-                if (Platform.isWindows() || Platform.isSolaris()) {
-                    try {
-                        process.getOutputStream().close();
-                    } catch (IOException e) {
-                        // do nothing on failure
-                    }
-                    try {
-                        process.getInputStream().close();
-                    } catch (IOException e) {
-                        // do nothing on failure
-                    }
-                    try {
-                        process.getErrorStream().close();
-                    } catch (IOException e) {
-                        // do nothing on failure
-                    }
-                }
-                process.destroy();
+                closeProcessStreams(process);
             }
+            cancelOutputRead(stdoutFuture);
+            cancelOutputRead(stderrFuture);
         }
-        if (timedOut) {
-            throw new RuntimeException("Command timed out after " + timeoutMillis + "ms: " + Arrays.toString(cmdToRunWithArgs));
+    }
+
+    private static void cancelOutputRead(Future<List<String>> outputFuture) {
+        if (outputFuture != null && !outputFuture.isDone()) {
+            outputFuture.cancel(true);
         }
-        if (errorList != null && errorList.size() > 0) {
-            throw new RuntimeException("Error Message: " + StringUtils.join(errorList, "\n"));
+    }
+
+    private static boolean waitWithoutTimeout(Process process) throws InterruptedException {
+        process.waitFor();
+        return true;
+    }
+
+    private static List<String> awaitOutput(Future<List<String>> outputFuture, String[] command) throws InterruptedException {
+        try {
+            return outputFuture.get();
+        } catch (ExecutionException e) {
+            throw new RuntimeException("Problem reading output from command: " + Arrays.toString(command), e.getCause());
         }
-        return infoList;
+    }
+
+    private static String formatOutput(List<String> output) {
+        return output.isEmpty() ? "" : ". Output: " + StringUtils.join(output, "\n");
+    }
+
+    private static void terminateProcessTree(Process process) {
+        List<ProcessHandle> descendants = process.descendants().toList();
+        for (int i = descendants.size() - 1; i >= 0; i--) {
+            descendants.get(i).destroyForcibly();
+        }
+        process.destroyForcibly();
+    }
+
+    private static void closeProcessStreams(Process process) {
+        try {
+            process.getOutputStream().close();
+        } catch (IOException ignored) {
+        }
+        try {
+            process.getInputStream().close();
+        } catch (IOException ignored) {
+        }
+        try {
+            process.getErrorStream().close();
+        } catch (IOException ignored) {
+        }
     }
 
     /**
@@ -172,37 +224,10 @@ public final class ShellCmdUtils {
             while ((line = reader.readLine()) != null) {
                 sa.add(line);
             }
-        } catch (Throwable e) {
-            String errorInfo = "Problem reading output from command:" + Arrays.toString(cmd) + ". Exception info: " + e.getMessage();
-            log.error(errorInfo, e);
-            throw new RuntimeException(errorInfo);
+        } catch (IOException e) {
+            throw new RuntimeException("Problem reading output from command: " + Arrays.toString(cmd), e);
         }
         return sa;
-    }
-
-    /**
-     * Return first line of response for selected command.
-     *
-     * @param cmd2launch String command to be launched
-     * @return String or empty string if command failed
-     */
-    public static String getFirstAnswer(String cmd2launch) {
-        return getAnswerAt(cmd2launch, 0);
-    }
-
-    /**
-     * Return response on selected line index (0-based) after running selected command.
-     *
-     * @param cmd2launch String command to be launched
-     * @param answerIdx  int index of line in response of the command
-     * @return String whole line in response or empty string if invalid index or running of command fails
-     */
-    public static String getAnswerAt(String cmd2launch, int answerIdx) {
-        List<String> sa = ShellCmdUtils.runNative(cmd2launch);
-        if (answerIdx >= 0 && answerIdx < sa.size()) {
-            return sa.get(answerIdx);
-        }
-        return "";
     }
 
 }

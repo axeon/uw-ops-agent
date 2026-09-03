@@ -105,7 +105,9 @@ public class OpsAgentApi {
             // 首次下发：从响应头取 secret 并落盘。
             String deliveredSecret = response.header(HEADER_SECRET);
             if (StringUtils.isNotBlank(deliveredSecret)) {
-                SecretStore.save(deliveredSecret);
+                if (!SecretStore.save(deliveredSecret)) {
+                    throw new RuntimeException("agent secret persistence failed.");
+                }
                 log.info("agent secret delivered from center.");
             }
             // 校验响应是否成功(body 为 ResponseData JSON)。

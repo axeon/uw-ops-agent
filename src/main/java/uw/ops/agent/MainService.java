@@ -10,6 +10,7 @@ import uw.ops.agent.api.OpsAgentApi;
 import uw.ops.agent.constant.TaskState;
 import uw.ops.agent.constant.TaskType;
 import uw.ops.agent.helper.SystemInfoHelper;
+import uw.ops.agent.nativeimage.NativeImageMetadataVerifier;
 import uw.ops.agent.util.NetworkUtils;
 import uw.ops.agent.util.PropertyUtils;
 import uw.ops.agent.util.SecretStore;
@@ -17,10 +18,8 @@ import uw.ops.agent.util.ShellRiskChecker;
 import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.OpsTask;
 
-import java.util.Date;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -54,6 +53,10 @@ public class MainService {
     }
 
     public static void main(String[] args) throws Exception {
+        if (NativeImageMetadataVerifier.isVerificationRequested(args)) {
+            NativeImageMetadataVerifier.verify();
+            return;
+        }
         log.info("uw-ops-agent starting at: {}", MainService.class.getProtectionDomain().getCodeSource().getLocation().getPath());
         if ("root".equals(System.getProperty("user.name"))) {
             log.warn("!!!uw-ops-agent is running as root, which is not recommended for security reasons.");
@@ -82,7 +85,7 @@ public class MainService {
 
     /**
      * 验证下行任务签名。
-     * 密钥从本地 SecretStore 读取；无密钥时拒绝执行任何任务(去除legacy，硬约束)。
+     * 密钥从本地 SecretStore 读取；无密钥时拒绝执行任何任务，不保留兼容放行路径。
      */
     private static void verifyTaskSign(OpsTask opsTask) {
         String agentSecret = SecretStore.load();
@@ -106,26 +109,31 @@ public class MainService {
      * 若上报过程中主机被 Center disable(OpsAgentApi 检测到 host-disabled 会清空本地 secret)，
      * 则立即停止重试——继续重试只会收到同样的 host-disabled 响应，无意义且阻塞调度。
      */
-    private static void reportTaskResult(OpsTask opsTask) {
+    private static boolean reportTaskResult(OpsTask opsTask) {
         for (int i = 0; i < REPORT_TRY_TIMES; i++) {
             try {
                 OpsAgentApi.reportTaskResult(opsTask);
-                return;
+                return true;
             } catch (Throwable e) {
-                log.error("!uw-ops-agent retry report {} times, error message: {}", i, e.getMessage(), e);
+                log.error("!uw-ops-agent report attempt {} failed, error message: {}", i + 1, e.getMessage(), e);
             }
             // secret 被清空说明主机已被 Center disable，停止重试。
             if (StringUtils.isBlank(SecretStore.load())) {
                 log.warn("agent secret cleared during reportTaskResult (host disabled), stop retrying.");
-                return;
+                return false;
+            }
+            if (i + 1 == REPORT_TRY_TIMES) {
+                break;
             }
             try {
                 Thread.sleep(REPORT_TRY_INTERVAL);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return;
+                return false;
             }
         }
+        log.error("uw-ops-agent failed to report task result after {} attempts.", REPORT_TRY_TIMES);
+        return false;
     }
 
     /**
@@ -226,14 +234,18 @@ public class MainService {
                                 upgradeTask = opsTask;
                                 continue;
                             }
-                            taskSuccess += runOpsTask(opsTask);
+                            if (runOpsTask(opsTask)) {
+                                taskSuccess++;
+                            }
                         }
                         // 最后处理升级任务(若存在)。
                         if (upgradeTask != null) {
-                            runOpsTask(upgradeTask);
-                            // 升级任务已完成上报，退出进程，由外部机制(systemd/supervisor)重启新版本。
-                            log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
-                            System.exit(0);
+                            if (runOpsTask(upgradeTask)) {
+                                // 升级成功且结果已上报，退出进程，由外部机制(systemd/supervisor)重启新版本。
+                                log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
+                                System.exit(0);
+                            }
+                            log.error("uw-ops-agent self update failed or result was not reported; keep current process running.");
                         }
                     }
                 }
@@ -254,14 +266,15 @@ public class MainService {
 
     /**
      * 执行单个 ops 任务(验签、端口替换、危险检查、运行脚本、上报结果)。
-     * 升级任务使用独立长超时，并在异步线程内上报后通过 latch 唤醒；普通任务同步执行。
+     * 升级任务使用独立长超时；只有任务执行成功且结果上报成功时才返回成功。
      *
      * @param opsTask
-     * @return 任务执行成功返回1，失败返回0
+     * @return 任务执行和结果上报均成功时返回 true
      */
-    private static int runOpsTask(OpsTask opsTask) {
+    private static boolean runOpsTask(OpsTask opsTask) {
         boolean isUpgrade = isUpgradeTask(opsTask);
-        opsTask.setExecuteDate(new Date());
+        boolean executionSucceeded = false;
+        opsTask.setExecuteDate(SystemClock.nowDate());
         try {
             //验签校验（必须在端口替换之前，校验原始脚本）
             verifyTaskSign(opsTask);
@@ -294,43 +307,24 @@ public class MainService {
                 throw new SecurityException(danger);
             }
             if (isUpgrade) {
-                //升级任务异步执行，带独立超时，上报完成后唤醒主线程。
+                // 升级任务同步执行，确保退出前任务结果已经上报。
                 opsTask.setTaskResult("!!!uw-ops-agent start self updating......");
                 log.warn(opsTask.getTaskResult());
                 opsTask.setState(TaskState.STARTING.getValue());
-                CountDownLatch upgradeLatch = new CountDownLatch(1);
-                new Thread(() -> {
-                    try {
-                        runTaskScript(opsTask, UPGRADE_TIMEOUT_MILLIS);
-                    } catch (Throwable e) {
-                        log.error(e.getMessage(), e);
-                        opsTask.setTaskError(e.getMessage());
-                        opsTask.setState(TaskState.FAILED.getValue());
-                    } finally {
-                        opsTask.setFinishDate(new Date());
-                        reportTaskResult(opsTask);
-                        upgradeLatch.countDown();
-                    }
-                }).start();
-                //await 加超时(升级超时 + 报告重试余量)，防止 hang 住卡死调度线程。
-                upgradeLatch.await(UPGRADE_TIMEOUT_MILLIS + 120_000L, java.util.concurrent.TimeUnit.MILLISECONDS);
-                return 0;
+                runTaskScript(opsTask, UPGRADE_TIMEOUT_MILLIS);
             } else {
                 runTaskScript(opsTask);
-                return 1;
             }
+            executionSucceeded = true;
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
             opsTask.setTaskError(e.getMessage());
             opsTask.setState(TaskState.FAILED.getValue());
-            return 0;
         } finally {
-            //升级任务已在新线程内完成上报，跳过；普通任务在此上报。
-            if (!isUpgrade) {
-                opsTask.setFinishDate(new Date());
-                reportTaskResult(opsTask);
-            }
+            opsTask.setFinishDate(SystemClock.nowDate());
         }
+        boolean reportSucceeded = reportTaskResult(opsTask);
+        return executionSucceeded && reportSucceeded;
     }
 
 }

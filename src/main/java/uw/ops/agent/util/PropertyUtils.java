@@ -48,12 +48,4 @@ public class PropertyUtils {
         }
         return sb.toString();
     }
-
-    public static void main(String[] args) throws IOException {
-        String data = "# test\na=b\nc=d";
-        Properties properties = loadFromString(data);
-        properties.put("x", "z");
-        data = storeToString(properties);
-        System.out.println(data);
-    }
 }

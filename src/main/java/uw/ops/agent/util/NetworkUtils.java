@@ -1,7 +1,5 @@
 package uw.ops.agent.util;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import uw.common.util.SystemClock;
 
 import java.io.IOException;
@@ -14,9 +12,6 @@ import java.util.concurrent.ConcurrentHashMap;
  * 网络端口工具。用于在指定端口被占用时自动寻找下一个可用端口，支持短时缓存避免重复探测。
  */
 public class NetworkUtils {
-
-
-    private static final Logger log = LoggerFactory.getLogger(NetworkUtils.class);
 
     /**
      * 端口检测的ttl。

@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
 env:
-  APP_NAME: uw-ops-agent
+  GRAALVM_IMAGE: container-registry.oracle.com/graalvm/native-image:25
 
 jobs:
   build:
@@ -20,7 +20,7 @@ jobs:
 
           # Step 1: 打包fat JAR
           echo "Building fat JAR..."
-          mvn -B package -Dmaven.test.skip=true
+          mvn -B package
           FAT_JAR=$(ls target/uw-ops-agent-*.jar | head -1)
 
           # 注册QEMU多架构支持
@@ -29,22 +29,30 @@ jobs:
           # Step 2-amd64: native-image容器编译
           echo "Building amd64..."
           docker run --rm --platform linux/amd64 \
-            -v $(pwd):/build -w /build \
-            container-registry.oracle.com/graalvm/native-image:25 \
-            --no-fallback -Os --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
+            -v "$(pwd):/build" -w /build \
+            ${GRAALVM_IMAGE} \
+            -Os -march=compatibility --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
             --enable-native-access=ALL-UNNAMED \
-            -H:ConfigurationFileDirectories=src/main/resources/META-INF/native-image/config \
             -o output/uw-ops-agent-amd64 -jar "$FAT_JAR"
+          docker run --rm --platform linux/amd64 \
+            -v "$(pwd):/build" -w /build \
+            --entrypoint /build/output/uw-ops-agent-amd64 \
+            ${GRAALVM_IMAGE} \
+            -XX:MissingRegistrationReportingMode=Exit --verify-native-metadata
 
           # Step 3-arm64: native-image容器编译
           echo "Building arm64..."
           docker run --rm --platform linux/arm64 \
-            -v $(pwd):/build -w /build \
-            container-registry.oracle.com/graalvm/native-image:25 \
-            --no-fallback -Os --enable-http --enable-https --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
+            -v "$(pwd):/build" -w /build \
+            ${GRAALVM_IMAGE} \
+            -Os -march=compatibility --strip-debug-info -R:MaxHeapSize=128m -R:MinHeapSize=8m \
             --enable-native-access=ALL-UNNAMED \
-            -H:ConfigurationFileDirectories=src/main/resources/META-INF/native-image/config \
             -o output/uw-ops-agent-arm64 -jar "$FAT_JAR"
+          docker run --rm --platform linux/arm64 \
+            -v "$(pwd):/build" -w /build \
+            --entrypoint /build/output/uw-ops-agent-arm64 \
+            ${GRAALVM_IMAGE} \
+            -XX:MissingRegistrationReportingMode=Exit --verify-native-metadata
 
           # 验证产物
           file output/uw-ops-agent-amd64

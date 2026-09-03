@@ -4,8 +4,7 @@ import java.io.Serializable;
 import java.util.Date;
 
 /**
- * OpsDeployTask实体类
- * 部署任务对列表
+ * 运维中心下发给 Agent 的任务数据。
  *
  * @author axeon
  */
