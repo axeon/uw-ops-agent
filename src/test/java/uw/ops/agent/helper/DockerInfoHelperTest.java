@@ -5,6 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import uw.ops.agent.helper.DockerInfoHelper.ContainerNotFoundException;
 import uw.ops.agent.helper.DockerInfoHelper.DockerApiException;
+import uw.ops.agent.helper.vo.CreateContainerParam;
+import uw.ops.agent.helper.vo.CreateContainerRaw;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -18,9 +20,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -86,13 +90,14 @@ class DockerInfoHelperTest {
     }
 
     /**
-     * 读完整请求头（到 \r\n\r\n）。
+     * 读完整请求：先读到头结束符 \r\n\r\n，再按 Content-Length 读满请求体
+     * （写操作 POST 带 JSON 体，只读头会导致客户端写体时服务端已关闭）。
      */
     private String readRequest(SocketChannel client) throws IOException {
         ByteBuffer buffer = ByteBuffer.allocate(8192);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] data = out.toByteArray();
-        while (!endsWithHeaderEnd(data)) {
+        int headerEnd = -1;
+        while (headerEnd < 0) {
             int n = client.read(buffer);
             if (n < 0) {
                 break;
@@ -100,19 +105,53 @@ class DockerInfoHelperTest {
             if (n > 0) {
                 out.write(buffer.array(), 0, n);
                 buffer.clear();
-                data = out.toByteArray();
+                headerEnd = indexOfHeaderEnd(out.toByteArray());
             }
         }
-        return new String(data, StandardCharsets.UTF_8);
+        if (headerEnd < 0) {
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+        int contentLength = contentLengthOf(out.toByteArray(), headerEnd);
+        while (out.size() < headerEnd + 4 + contentLength) {
+            int n = client.read(buffer);
+            if (n < 0) {
+                break;
+            }
+            if (n > 0) {
+                out.write(buffer.array(), 0, n);
+                buffer.clear();
+            }
+        }
+        return new String(out.toByteArray(), StandardCharsets.UTF_8);
     }
 
-    private boolean endsWithHeaderEnd(byte[] data) {
-        for (int i = Math.max(0, data.length - 4); i <= data.length - 4; i++) {
+    /**
+     * 定位头结束符位置（全量扫描，非仅尾部）。
+     */
+    private int indexOfHeaderEnd(byte[] data) {
+        for (int i = 0; i <= data.length - 4; i++) {
             if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n') {
-                return true;
+                return i;
             }
         }
-        return false;
+        return -1;
+    }
+
+    /**
+     * 解析请求头内的 Content-Length（无声明返回 0）。
+     */
+    private int contentLengthOf(byte[] data, int headerEnd) {
+        String header = new String(data, 0, headerEnd, StandardCharsets.UTF_8);
+        for (String line : header.split("\r\n")) {
+            if (line.toLowerCase().startsWith("content-length:")) {
+                try {
+                    return Integer.parseInt(line.substring(15).trim());
+                } catch (NumberFormatException e) {
+                    return 0;
+                }
+            }
+        }
+        return 0;
     }
 
     /** 每用例注入本用例的临时 socket 路径与 2 秒短超时。 */
@@ -272,5 +311,102 @@ class DockerInfoHelperTest {
         assertTrue(lastRequest.get().contains("since=1700000000.000000000"), "since format: " + lastRequest.get());
         assertTrue(lastRequest.get().contains("until=1700000060.000000000"), "until format: " + lastRequest.get());
         assertTrue(lastRequest.get().contains("type"), "filters present: " + lastRequest.get());
+    }
+
+    @Test
+    void createContainerPostsParamAndParsesId() throws DockerApiException {
+        String createBody = "{\"Id\":\"def4567890ab\",\"Warnings\":[]}";
+        String response = "HTTP/1.1 201 Created\r\nContent-Length: " + createBody.getBytes(StandardCharsets.UTF_8).length + "\r\n\r\n" + createBody;
+        responder = request -> {
+            //请求行：POST + create 端点 + name 参数（容器名 URL 安全字符）。
+            assertTrue(request.startsWith("POST /containers/create?name=uw-ops-123 "), "create request line: " + request);
+            //带体请求自动携带 JSON 头与长度。
+            assertTrue(request.contains("Content-Type: application/json"), "content-type: " + request);
+            assertTrue(request.contains("Content-Length: "), "content-length: " + request);
+            //请求体：Image/Env/Labels/HostConfig 关键字段（NON_NULL 省略未设字段）。
+            assertTrue(request.contains("\"Image\":\"registry/uw-x@sha256:abc\""), "image body: " + request);
+            assertTrue(request.contains("\"Env\":[\"APP_PORT=10010\"]"), "env body: " + request);
+            assertTrue(request.contains("\"uw.ops.container-id\":\"123\""), "labels body: " + request);
+            assertTrue(request.contains("\"NetworkMode\":\"host\""), "network body: " + request);
+            assertTrue(request.contains("\"Name\":\"unless-stopped\""), "restart body: " + request);
+            assertTrue(request.contains("\"Binds\":[\"/etc/localtime:/etc/localtime:ro\"]"), "binds body: " + request);
+            assertTrue(request.contains("\"NanoCpus\":2000000000"), "cpu body: " + request);
+            assertTrue(request.contains("\"Memory\":2147483648"), "memory body: " + request);
+            assertFalse(request.contains("\"PortBindings\""), "unset field omitted: " + request);
+            return response;
+        };
+        CreateContainerParam param = new CreateContainerParam();
+        param.setImage("registry/uw-x@sha256:abc");
+        param.setEnv(List.of("APP_PORT=10010"));
+        param.setLabels(Map.of("uw.ops.container-id", "123"));
+        param.setExposedPorts(Map.of("10010/tcp", new CreateContainerParam.ExposedPort()));
+        CreateContainerParam.HostConfigSection hostConfig = new CreateContainerParam.HostConfigSection();
+        hostConfig.setNetworkMode("host");
+        hostConfig.setMemory(2048L * 1024 * 1024);
+        hostConfig.setNanoCpus(2_000_000_000L);
+        hostConfig.setBinds(List.of("/etc/localtime:/etc/localtime:ro"));
+        CreateContainerParam.RestartPolicySection restartPolicy = new CreateContainerParam.RestartPolicySection();
+        restartPolicy.setName("unless-stopped");
+        hostConfig.setRestartPolicy(restartPolicy);
+        param.setHostConfig(hostConfig);
+        CreateContainerRaw raw = DockerInfoHelper.createContainer("uw-ops-123", param);
+        assertEquals("def4567890ab", raw.getId());
+    }
+
+    @Test
+    void startContainerAccepts204And304() throws DockerApiException {
+        responder = request -> {
+            assertTrue(request.startsWith("POST /containers/abc123/start "), "start request: " + request);
+            return "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+        };
+        DockerInfoHelper.startContainer("abc123");
+        //304=已在运行，幂等成功。
+        responder = request -> "HTTP/1.1 304 Not Modified\r\nContent-Length: 0\r\n\r\n";
+        DockerInfoHelper.startContainer("abc123");
+    }
+
+    @Test
+    void stopContainerPassesTimeoutParam() throws DockerApiException {
+        responder = request -> {
+            assertTrue(request.startsWith("POST /containers/abc123/stop?t=30 "), "stop request: " + request);
+            return "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+        };
+        DockerInfoHelper.stopContainer("abc123", 30);
+        //304=已停止，幂等成功。
+        responder = request -> "HTTP/1.1 304 Not Modified\r\nContent-Length: 0\r\n\r\n";
+        DockerInfoHelper.stopContainer("abc123", 30);
+    }
+
+    @Test
+    void writeOperation404MappedToContainerNotFound() {
+        responder = request -> "HTTP/1.1 404 Not Found\r\nContent-Length: 25\r\n\r\n{\"message\":\"No such container\"}";
+        assertThrows(ContainerNotFoundException.class, () -> DockerInfoHelper.stopContainer("gone01", 30));
+        assertThrows(ContainerNotFoundException.class, () -> DockerInfoHelper.removeContainer("gone01"));
+    }
+
+    @Test
+    void writeOperationUnexpectedStatusFails() {
+        responder = request -> "HTTP/1.1 409 Conflict\r\nContent-Length: 0\r\n\r\n";
+        //同名容器已存在（409）不在 create 成功码内，异常交执行器做幂等清理。
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.createContainer("uw-ops-123", new CreateContainerParam()));
+    }
+
+    @Test
+    void removeContainerSendsDeleteWithForce() throws DockerApiException {
+        responder = request -> {
+            assertTrue(request.startsWith("DELETE /containers/abc123?force=1&v=1 "), "remove request: " + request);
+            return "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n";
+        };
+        DockerInfoHelper.removeContainer("abc123");
+    }
+
+    @Test
+    void illegalContainerTokenRejectedBeforeRequest() {
+        //路径注入字符在发请求前即被拒绝（responder 维持 500：若真的发出请求将失败）。
+        responder = request -> "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.startContainer("bad/name"));
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.stopContainer("a b", 30));
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.removeContainer("../etc"));
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.createContainer("a?b", new CreateContainerParam()));
     }
 }

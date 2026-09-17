@@ -14,6 +14,8 @@ import uw.ops.agent.vo.OpsTask;
 import uw.ops.agent.helper.vo.ContainerInspectRaw;
 import uw.ops.agent.helper.vo.ContainerStatsRaw;
 import uw.ops.agent.helper.vo.ContainerSummaryRaw;
+import uw.ops.agent.helper.vo.CreateContainerParam;
+import uw.ops.agent.helper.vo.CreateContainerRaw;
 import uw.ops.agent.vo.sub.ContainerInfo;
 
 import java.io.IOException;
@@ -28,6 +30,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Native Image 元数据运行时验证器。
@@ -42,7 +45,8 @@ import java.util.List;
  *   <li>vo 包 setter 反射（{@link AgentReflectionFeature} 注册的 declared 方法路径）；</li>
  *   <li>上/下行协议 JSON 绑定（OpsTask/ResponseData/HostStats 序列化）；</li>
  *   <li>Engine API 响应 vo 绑定（ContainerSummaryRaw/ContainerStatsRaw/ContainerInspectRaw，
- *       含 @JsonProperty snake/Pascal 映射、Map 嵌套绑定）；</li>
+ *       含 @JsonProperty snake/Pascal 映射、Map 嵌套绑定）与写操作 vo（CreateContainerParam 出站序列化、
+ *       CreateContainerRaw 响应绑定——结构化任务通道）；</li>
  *   <li>HMAC 签名与 TLS 上下文（JDK crypto provider 元数据）；</li>
  *   <li>资源包含（oshi/slf4j 配置与 SPI 文件）；</li>
  *   <li>Linux 原生访问（JNA 库加载、OSHI 硬件/OS 读取）；</li>
@@ -249,6 +253,27 @@ public final class NativeImageMetadataVerifier {
         //下行任务对象绑定。
         OpsTask task = JsonUtils.parse("{\"id\":1,\"taskScript\":\"true\"}", OpsTask.class);
         require(task.getId() == 1 && "true".equals(task.getTaskScript()), "OpsTask deserialization");
+
+        //结构化任务写操作 vo：create 请求体出站序列化（PascalCase + null 省略）与 daemon 响应入站绑定。
+        CreateContainerParam createParam = new CreateContainerParam();
+        createParam.setImage("registry.example.com/uw-task-center@sha256:abc123");
+        createParam.setEnv(List.of("APP_PORT=10010", "TZ=Asia/Shanghai"));
+        createParam.setLabels(Map.of("uw.ops.container-id", "123"));
+        CreateContainerParam.HostConfigSection hostConfig = new CreateContainerParam.HostConfigSection();
+        hostConfig.setNetworkMode("host");
+        hostConfig.setMemory(1024L * 1024 * 1024);
+        hostConfig.setBinds(List.of("/etc/localtime:/etc/localtime:ro"));
+        CreateContainerParam.RestartPolicySection restartPolicy = new CreateContainerParam.RestartPolicySection();
+        restartPolicy.setName("unless-stopped");
+        hostConfig.setRestartPolicy(restartPolicy);
+        createParam.setHostConfig(hostConfig);
+        String createJson = JsonUtils.toString(createParam);
+        require(createJson.contains("\"Image\"") && createJson.contains("\"NetworkMode\"")
+                && createJson.contains("\"RestartPolicy\"") && !createJson.contains("\"PortBindings\""),
+                "CreateContainerParam serialization");
+
+        CreateContainerRaw createRaw = JsonUtils.parse("{\"Id\":\"abc123def\",\"Warnings\":[]}", CreateContainerRaw.class);
+        require("abc123def".equals(createRaw.getId()) && createRaw.getWarnings().isEmpty(), "CreateContainerRaw deserialization");
     }
 
     /**

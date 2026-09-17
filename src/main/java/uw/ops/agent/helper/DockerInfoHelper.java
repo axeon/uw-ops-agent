@@ -9,6 +9,8 @@ import uw.ops.agent.helper.vo.ContainerEventRaw;
 import uw.ops.agent.helper.vo.ContainerInspectRaw;
 import uw.ops.agent.helper.vo.ContainerStatsRaw;
 import uw.ops.agent.helper.vo.ContainerSummaryRaw;
+import uw.ops.agent.helper.vo.CreateContainerParam;
+import uw.ops.agent.helper.vo.CreateContainerRaw;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -55,7 +57,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       上报协议转换（ContainerInfo）由 HostStatsCollector 承担；</li>
  *   <li>GET /containers/{id}/stats?stream=false&amp;one-shot=1：性能计数（one-shot 跳过 daemon 预读）；</li>
  *   <li>GET /events?since=&amp;until=&amp;filters：容器事件窗口查询（10 秒一轮，带 until 请求自然关闭，非常驻流）；</li>
- *   <li>GET /containers/{id}/json：inspect（当前无调用方，方法保留备用——配额/SizeRw 等独家字段未来接入）。</li>
+ *   <li>GET /containers/{id}/json：inspect（配额核对与结构化任务幂等判定）。</li>
+ * </ul>
+ * 写操作端点（仅限 ops 结构化任务通道 StructuredTaskExecutor 触发，采集路径只读不变）：
+ * <ul>
+ *   <li>POST /containers/create?name=：创建容器（daemon 先拉镜像，长超时）；</li>
+ *   <li>POST /containers/{id}/start：启动（204/304 幂等成功）；</li>
+ *   <li>POST /containers/{id}/stop?t=N：优雅停止（SIGTERM 等待 N 秒后 SIGKILL）；</li>
+ *   <li>DELETE /containers/{id}?force=1&amp;v=1：清理残留（结构化 START 的幂等重建前置）。</li>
  * </ul>
  */
 public class DockerInfoHelper {
@@ -97,6 +106,46 @@ public class DockerInfoHelper {
      * 单请求总超时(毫秒)，默认 5 秒/轮（测试可注入覆盖）。
      */
     private static volatile int timeoutMillis = 5000;
+
+    /**
+     * create 超时(毫秒)：daemon 在 create 时拉取镜像（多架构大镜像可达分钟级），按普通任务 10 分钟预算上限。
+     */
+    private static final int CREATE_TIMEOUT_MILLIS = 600_000;
+
+    /**
+     * start 超时(毫秒)。
+     */
+    private static final int START_TIMEOUT_MILLIS = 60_000;
+
+    /**
+     * stop 超时在 t 参数基础上的余量(毫秒)：覆盖 SIGKILL 与 daemon 清理耗时。
+     */
+    private static final int STOP_TIMEOUT_MARGIN_MILLIS = 15_000;
+
+    /**
+     * remove 超时(毫秒)。
+     */
+    private static final int REMOVE_TIMEOUT_MILLIS = 30_000;
+
+    /**
+     * 读操作成功码。
+     */
+    private static final int[] STATUS_OK = {200};
+
+    /**
+     * create 成功码。
+     */
+    private static final int[] STATUS_CREATED = {201};
+
+    /**
+     * start/stop 成功码：204=已变更，304=已在目标状态（幂等成功）。
+     */
+    private static final int[] STATUS_NO_CONTENT_IDEMPOTENT = {204, 304};
+
+    /**
+     * remove 成功码。
+     */
+    private static final int[] STATUS_NO_CONTENT = {204};
 
     /**
      * UDS 目标地址：初始由 {@link Constants#getOpsDockerSock()} 解析（环境变量优先，默认值兜底）；
@@ -283,6 +332,93 @@ public class DockerInfoHelper {
     }
 
     /**
+     * 创建容器（POST /containers/create?name=），不指定平台（daemon 按主机架构选择）。
+     * 镜像本地不存在时 daemon 会先拉取，超时按 10 分钟任务预算；
+     * 同名容器已存在时 daemon 返回 409，由调用方（结构化执行器）先做幂等清理。
+     *
+     * @param containerName 容器名（uw-ops-{containerId}，URL 编码前做安全字符校验）
+     * @param param         创建参数（镜像/env/labels/挂载/资源/CPU/重启策略/网络等 API 全集）
+     * @return 响应 vo，{@link CreateContainerRaw#getId()} 为 Docker 返回的容器 ID（containerHash 台账来源）
+     */
+    public static CreateContainerRaw createContainer(String containerName, CreateContainerParam param) throws DockerApiException {
+        return createContainer(containerName, param, null);
+    }
+
+    /**
+     * 创建容器（POST /containers/create?name=&amp;platform=）。
+     *
+     * @param platform 平台（如 linux/amd64、linux/arm64；多架构镜像按 tag 拉取时强制选择，
+     *                 null=不指定由 daemon 按主机架构选择；@digest 已锁定架构的场景通常不需要）
+     */
+    public static CreateContainerRaw createContainer(String containerName, CreateContainerParam param, String platform) throws DockerApiException {
+        requireSafeToken(containerName);
+        byte[] body;
+        try {
+            body = JsonUtils.toBytes(param);
+        } catch (Exception e) {
+            throw new DockerApiException("serialize create param failed: " + containerName, e);
+        }
+        String path = "/containers/create?name=" + urlEncode(containerName);
+        if (platform != null && !platform.isEmpty()) {
+            path += "&platform=" + urlEncode(platform);
+        }
+        byte[] response = execute("POST", path, body, CREATE_TIMEOUT_MILLIS, STATUS_CREATED);
+        return parseVo(response, CreateContainerRaw.class);
+    }
+
+    /**
+     * 启动容器（POST /containers/{id}/start）。204/304 均为成功（304=已在运行，幂等重放安全）。
+     *
+     * @param containerId 容器完整 Id 或名称
+     */
+    public static void startContainer(String containerId) throws DockerApiException {
+        requireSafeToken(containerId);
+        execute("POST", "/containers/" + containerId + "/start", null, START_TIMEOUT_MILLIS, STATUS_NO_CONTENT_IDEMPOTENT);
+    }
+
+    /**
+     * 优雅停止容器（POST /containers/{id}/stop?t=N）：先 SIGTERM 等待 N 秒（应用走停机链摘流），
+     * 超时后 daemon 发 SIGKILL。204/304 均为成功（304=已停止）。404 抛 {@link ContainerNotFoundException}，
+     * 调用方按"容器已不在"幂等成功处理。
+     *
+     * @param containerId   容器完整 Id 或名称
+     * @param timeoutSeconds SIGTERM 等待秒数（terminationGraceSeconds）
+     */
+    public static void stopContainer(String containerId, int timeoutSeconds) throws DockerApiException {
+        requireSafeToken(containerId);
+        int timeoutMillis = timeoutSeconds * 1000 + STOP_TIMEOUT_MARGIN_MILLIS;
+        execute("POST", "/containers/" + containerId + "/stop?t=" + timeoutSeconds, null, timeoutMillis, STATUS_NO_CONTENT_IDEMPOTENT);
+    }
+
+    /**
+     * 删除容器（DELETE /containers/{id}?force=1&v=1，强制删含卷）。仅用于结构化 START 的幂等重建前置
+     * （对齐模板 start 脚本头部的 stop+rm 清理行）；常规 STOP 保留容器现场，不调用本方法。
+     *
+     * @param containerId 容器完整 Id 或名称
+     */
+    public static void removeContainer(String containerId) throws DockerApiException {
+        requireSafeToken(containerId);
+        execute("DELETE", "/containers/" + containerId + "?force=1&v=1", null, REMOVE_TIMEOUT_MILLIS, STATUS_NO_CONTENT);
+    }
+
+    /**
+     * URL 路径段安全校验：容器名/Id 只允许字母数字与 . _ -，拒绝空值与路径注入字符
+     * （/ ? & 空格等会破坏手工拼接的请求行）。
+     */
+    private static void requireSafeToken(String token) throws DockerApiException {
+        if (token == null || token.isEmpty()) {
+            throw new DockerApiException("container name/id is blank");
+        }
+        for (int i = 0; i < token.length(); i++) {
+            char c = token.charAt(i);
+            boolean allowed = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '_' || c == '-';
+            if (!allowed) {
+                throw new DockerApiException("illegal container name/id: " + token);
+            }
+        }
+    }
+
+    /**
      * 纳秒时间戳转 Docker API 时间参数（sec.nanos 格式，保证窗口边界纳秒精度）。
      */
     private static String dockerTimestamp(long nano) {
@@ -381,15 +517,29 @@ public class DockerInfoHelper {
     }
 
     /**
-     * 执行一次 GET 请求（自动拼协商的版本前缀）。
-     * 单连接、单请求、Connection: close；总超时控制整个连接生命周期。
+     * 执行一次 GET 请求（默认 5 秒超时，成功码 200）。
      *
      * @param path 请求路径(含查询串)
      * @return 响应体字节
      */
     private static byte[] execute(String path) throws DockerApiException {
+        return execute("GET", path, null, timeoutMillis, STATUS_OK);
+    }
+
+    /**
+     * 执行一次请求（自动拼协商的版本前缀）。
+     * 单连接、单请求、Connection: close；总超时控制整个连接生命周期。
+     *
+     * @param method               HTTP 方法（GET/POST/DELETE）
+     * @param path                 请求路径(含查询串)
+     * @param body                 请求体（null=无体；非 null 自动携带 Content-Type 与 Content-Length）
+     * @param requestTimeoutMillis 本次请求总超时(毫秒)——写操作按各自预算独立传入
+     * @param successCodes         成功状态码集合（读 200、create 201、start/stop 204+304、remove 204）
+     * @return 响应体字节
+     */
+    private static byte[] execute(String method, String path, byte[] body, int requestTimeoutMillis, int[] successCodes) throws DockerApiException {
         String fullPath = apiPrefix + path;
-        long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
+        long deadline = System.nanoTime() + requestTimeoutMillis * 1_000_000L;
         try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX);
              Selector selector = Selector.open()) {
             channel.configureBlocking(false);
@@ -404,15 +554,35 @@ public class DockerInfoHelper {
                 }
             }
             //发送请求。
-            byte[] requestBytes = ("GET " + fullPath + " HTTP/1.1\r\nHost: docker\r\nAccept: application/json\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII);
+            byte[] requestBytes = buildRequest(method, fullPath, body);
             writeFully(channel, selector, ByteBuffer.wrap(requestBytes), deadline);
             //读取完整响应。
-            return readResponse(channel, selector, deadline);
+            return readResponse(channel, selector, deadline, successCodes);
         } catch (DockerApiException e) {
             throw e;
         } catch (Exception e) {
-            throw new DockerApiException("uds request failed: " + fullPath + ", err=" + e, e);
+            throw new DockerApiException("uds request failed: " + method + " " + fullPath + ", err=" + e, e);
         }
+    }
+
+    /**
+     * 拼请求报文：请求行 + 固定头 +（有体时）Content-Type/Content-Length + 空行 + 体。
+     */
+    private static byte[] buildRequest(String method, String path, byte[] body) {
+        StringBuilder head = new StringBuilder(160);
+        head.append(method).append(' ').append(path).append(" HTTP/1.1\r\nHost: docker\r\nAccept: application/json\r\nConnection: close\r\n");
+        if (body != null) {
+            head.append("Content-Type: application/json\r\nContent-Length: ").append(body.length).append("\r\n");
+        }
+        head.append("\r\n");
+        byte[] headBytes = head.toString().getBytes(StandardCharsets.US_ASCII);
+        if (body == null || body.length == 0) {
+            return headBytes;
+        }
+        byte[] request = new byte[headBytes.length + body.length];
+        System.arraycopy(headBytes, 0, request, 0, headBytes.length);
+        System.arraycopy(body, 0, request, headBytes.length, body.length);
+        return request;
     }
 
     /**
@@ -435,7 +605,7 @@ public class DockerInfoHelper {
      * 纯长度比较零拷贝，chunked 路径用游标只推进新增数据——避免每读入一段就全量拷贝重扫
      * （千容器 inventory 响应为 O(n²) 拷贝，是常驻进程最大的 GC 压力源）。
      */
-    private static byte[] readResponse(SocketChannel channel, Selector selector, long deadline) throws IOException, DockerApiException {
+    private static byte[] readResponse(SocketChannel channel, Selector selector, long deadline, int[] successCodes) throws IOException, DockerApiException {
         channel.register(selector, SelectionKey.OP_READ);
         ResponseBuffer buffer = new ResponseBuffer(16 * 1024);
         ByteBuffer chunk = ByteBuffer.allocate(16 * 1024);
@@ -483,7 +653,7 @@ public class DockerInfoHelper {
                 break;
             }
         }
-        return parseResponse(buffer.data(), buffer.size(), head);
+        return parseResponse(buffer.data(), buffer.size(), head, successCodes);
     }
 
     /**
@@ -492,7 +662,7 @@ public class DockerInfoHelper {
      *
      * @return body 字节
      */
-    private static byte[] parseResponse(byte[] data, int limit, ResponseHead head) throws DockerApiException {
+    private static byte[] parseResponse(byte[] data, int limit, ResponseHead head, int[] successCodes) throws DockerApiException {
         int lineEnd = indexOf(data, limit, CRLF, 0);
         if (lineEnd < 0) {
             throw new DockerApiException("malformed http response: no status line");
@@ -509,11 +679,11 @@ public class DockerInfoHelper {
         } catch (NumberFormatException e) {
             throw new DockerApiException("malformed status code: " + statusLine);
         }
-        if (code != 200) {
+        if (!containsCode(successCodes, code)) {
             if (code == 404) {
                 throw new ContainerNotFoundException("docker api 404: " + (parts.length > 2 ? parts[2] : "not found"));
             }
-            throw new DockerApiException("docker api non-200: " + code);
+            throw new DockerApiException("docker api unexpected status: " + code + " (expected " + Arrays.toString(successCodes) + ")");
         }
         if (head == null) {
             throw new DockerApiException("malformed http response: no header terminator");
@@ -657,6 +827,18 @@ public class DockerInfoHelper {
             return i;
         }
         return -1;
+    }
+
+    /**
+     * 状态码命中判定。
+     */
+    private static boolean containsCode(int[] successCodes, int code) {
+        for (int success : successCodes) {
+            if (success == code) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
