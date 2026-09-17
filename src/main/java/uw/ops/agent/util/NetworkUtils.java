@@ -25,10 +25,11 @@ public class NetworkUtils {
     private static final Map<Integer, Long> usedPortMap = new ConcurrentHashMap<>(100);
 
     /**
-     * 检查端口缓存。
+     * 检查端口是否处于"已使用"缓存（TTL 内的其他探测结果复用，避免重复 bind 探测）。
+     * 未缓存的端口登记当前时间戳并视为未占用。
      *
-     * @param port
-     * @return
+     * @param port 端口号
+     * @return 缓存命中且未过期为 true（视为已使用）
      */
     private static boolean checkPortCache(int port) {
         boolean exists = true;

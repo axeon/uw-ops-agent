@@ -21,9 +21,9 @@ public class OpsTask implements Serializable {
     private long planId;
 
     /**
-     * 计划实例id
+     * 计划容器id
      */
-    private long instanceId;
+    private long containerId;
 
     /**
      * 集群id
@@ -83,22 +83,22 @@ public class OpsTask implements Serializable {
     /**
      * 任务下发时间
      */
-    private java.util.Date createDate;
+    private Date createDate;
 
     /**
      * 计划时间
      */
-    private java.util.Date scheduleDate;
+    private Date scheduleDate;
 
     /**
      * 开始执行时间
      */
-    private java.util.Date executeDate;
+    private Date executeDate;
 
     /**
      * 执行结束时间
      */
-    private java.util.Date finishDate;
+    private Date finishDate;
 
     /**
      * 状态
@@ -121,12 +121,12 @@ public class OpsTask implements Serializable {
         this.planId = planId;
     }
 
-    public long getInstanceId() {
-        return instanceId;
+    public long getContainerId() {
+        return containerId;
     }
 
-    public void setInstanceId(long instanceId) {
-        this.instanceId = instanceId;
+    public void setContainerId(long containerId) {
+        this.containerId = containerId;
     }
 
     public long getClusterId() {

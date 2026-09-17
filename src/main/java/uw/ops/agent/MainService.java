@@ -7,15 +7,18 @@ import uw.common.response.ResponseData;
 import uw.common.util.HmacUtils;
 import uw.common.util.SystemClock;
 import uw.ops.agent.api.OpsAgentApi;
+import uw.ops.agent.constant.Constants;
 import uw.ops.agent.constant.TaskState;
 import uw.ops.agent.constant.TaskType;
-import uw.ops.agent.helper.SystemInfoHelper;
+import uw.ops.agent.helper.DockerInfoHelper;
+import uw.ops.agent.helper.HostStatsCollector;
 import uw.ops.agent.nativeimage.NativeImageMetadataVerifier;
 import uw.ops.agent.util.NetworkUtils;
 import uw.ops.agent.util.PropertyUtils;
 import uw.ops.agent.util.SecretStore;
 import uw.ops.agent.util.ShellRiskChecker;
 import uw.ops.agent.util.ShellCmdUtils;
+import uw.ops.agent.vo.HostStats;
 import uw.ops.agent.vo.OpsTask;
 
 import java.util.List;
@@ -23,28 +26,53 @@ import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-
-import static uw.ops.agent.AgentInfo.AGENT_INFO;
 
 /**
  * 主运行服务。
+ * <p>
+ * v2.0 调度：主轮 scheduleAtFixedRate(60s 恒定激发)一次完成"采集→差分组装→上报"
+ * （两点差分=精确满窗均值，硬预算~33s<周期不追赶）；事件窗口(20s)与任务轮询(10s)独立。
  */
 public class MainService {
 
-    private static final Logger log = LoggerFactory.getLogger(AGENT_INFO);
+    private static final Logger log = LoggerFactory.getLogger(Constants.getAgentInfo());
+
     /**
      * 报告重试次数100次。
      */
     private static final int REPORT_TRY_TIMES = 100;
+
     /**
      * 报告重试间隔10s。
      */
     private static final int REPORT_TRY_INTERVAL = 10_000;
+
     /**
      * 任务签名时间窗口：5分钟(与Center端 agentSignTimeWindow 对齐)。
      */
     private static final long SIGN_TIME_WINDOW = 300_000L;
+
+    /**
+     * 指标上报当场重试次数：3 次×5s 覆盖 Center 短暂抖动，全失败放弃该窗口。
+     */
+    private static final int STATS_UPLOAD_RETRY_TIMES = 3;
+
+    /**
+     * 指标上报重试间隔(毫秒)。
+     */
+    private static final long STATS_UPLOAD_RETRY_INTERVAL = 5_000L;
+
+    /**
+     * 普通任务脚本执行超时：10分钟。
+     */
+    private static final long TASK_TIMEOUT_MILLIS = 600_000L;
+
+    /**
+     * 升级任务脚本执行超时：5分钟(下载二进制)。
+     */
+    private static final long UPGRADE_TIMEOUT_MILLIS = 300_000L;
 
     static {
         //必须是初始化之前执行log属性设置。
@@ -62,6 +90,11 @@ public class MainService {
             log.warn("!!!uw-ops-agent is running as root, which is not recommended for security reasons.");
         }
 
+        //60秒两点差分器(静态单例)；启动即建立差分基线（ticks/cs/int/网卡/磁盘），首个窗口即产出有效差值。
+        HostStatsCollector.init();
+        //Docker Engine API客户端(本机UDS)，启动时协商API版本前缀。
+        DockerInfoHelper.negotiateApiVersion();
+
         //设置系统属性。
         AtomicInteger threadCounter = new AtomicInteger(0);
         ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(4, runnable -> {
@@ -72,14 +105,152 @@ public class MainService {
         });
         //每1个小时上传一次服务器信息。
         scheduledExecutorService.scheduleAtFixedRate(new UploadHostInfoTask(), 0, 1, TimeUnit.HOURS);
-        //每60秒钟上传一次服务器性能信息。
-        scheduledExecutorService.scheduleAtFixedRate(new UploadHostStatsTask(), 10, 60, TimeUnit.SECONDS);
+        //主轮(60s恒定激发,fixedRate)：inventory → 容器stats(两点差分的第二点) → Host边界采集(同刻δ=0)
+        //→ 差分组装 → 上报。各环节硬预算合计~33s<周期，激发永不追赶重叠；初始延迟随机打散0~59s
+        //(多主机批量重启错开上报相位；首个完整窗口需要两次激发建立差分基准)。
+        long reportScatterSeconds = ThreadLocalRandom.current().nextLong(60);
+        scheduledExecutorService.scheduleAtFixedRate(new StatsReportTask(), reportScatterSeconds, 60, TimeUnit.SECONDS);
+        //每10秒事件窗口采集(独立调度，与主轮错开相位：单请求读 daemon 内存缓冲，成本毫秒级；
+        //高密度拉取对抗事件journal环形缓冲被冲刷——缓冲64条硬编码不可调且被挤出不可检测，
+        //丢失条件=拉取间隔内事件数>64，10s间隔安全阈值6.4条/s(≈10个并发crash-loop容器的
+        //die/restart/start流量)；运维脚本批量启停(50+条/s)属daemon架构级限制防不住，靠台账
+        //对账兜底；事件累积在采集器，主轮仍60s消费一次)。
+        scheduledExecutorService.scheduleAtFixedRate(new DockerEventTask(), reportScatterSeconds+10, 10, TimeUnit.SECONDS);
         //每10秒钟检查并处理ops任务。
-        scheduledExecutorService.scheduleAtFixedRate(new ProcessOpsTask(), 10, 10, TimeUnit.SECONDS);
+        scheduledExecutorService.scheduleAtFixedRate(new ProcessOpsTask(), reportScatterSeconds+20, 10, TimeUnit.SECONDS);
         if (StringUtils.isBlank(SecretStore.load())) {
             log.warn("uw-ops-agent started without agent secret, waiting for center to deliver via uploadHostStats...");
         } else {
             log.info("uw-ops-agent started with agent secret.");
+        }
+    }
+
+    /**
+     * 上传服务器信息的任务（每小时）：采集入口 {@link HostStatsCollector#buildHostInfo()}。
+     */
+    public static class UploadHostInfoTask implements Runnable {
+
+        @Override
+        public void run() {
+            long start = SystemClock.now();
+            try {
+                OpsAgentApi.uploadHostInfo(HostStatsCollector.buildHostInfo());
+            } catch (Throwable e) {
+                log.error(e.getMessage(), e);
+            }
+            log.info("UploadHostInfoTask run finished in {}ms.", SystemClock.now() - start);
+        }
+    }
+
+    /**
+     * 主轮任务（60s 恒定激发）：采集+差分内聚在 {@link HostStatsCollector#buildHostStats()}，
+     * 本任务只负责发送（失败当场重试同一 payload，全失败放弃该窗口，下轮新窗）。
+     * <p>
+     * 预算：buildHostStats 内部 inventory 5s + stats 12s + Host 边界毫秒级 + 上报 15s ≈ 33s &lt; 60s 周期，
+     * fixedRate 激发时刻恒定 → 差分两点=相邻激发=恰好一个完整窗口（精确满窗均值）。
+     */
+    public static class StatsReportTask implements Runnable {
+
+        @Override
+        public void run() {
+            long start = SystemClock.now();
+            try {
+                //组包内部完成采集+差分+事件合并（重试重复由 Center 端 (host_id, time_nano) 唯一键幂等挡除）。
+                uploadStatsWithRetry(HostStatsCollector.buildHostStats());
+            } catch (Throwable e) {
+                log.error("window report build failed: {}", e.getMessage(), e);
+            }
+            log.info("StatsReportTask run finished in {}ms.", SystemClock.now() - start);
+        }
+    }
+
+    /**
+     * 发送层当场重试（与采集解耦）：同一 payload 重试撞 Center 的 (host_id, create_date) 唯一键幂等，
+     * 3 次×5s 覆盖 Center 短暂抖动；全失败放弃该窗口（监控快照可容忍，长挂期间本就无消费方），
+     * 下轮照常产出全新窗口——采集节奏永不被发送失败牵动。
+     * 事件批例外：窗口可弃事件不可再生（台账与告警的证据链），全失败/中断时从 payload 提取回灌下轮再报。
+     */
+    private static void uploadStatsWithRetry(HostStats payload) {
+        for (int i = 0; i < STATS_UPLOAD_RETRY_TIMES; i++) {
+            try {
+                OpsAgentApi.uploadHostStats(payload);
+                return;
+            } catch (Throwable e) {
+                log.error("stats upload attempt {} failed: {}", i + 1, e.getMessage(), e);
+            }
+            try {
+                Thread.sleep(STATS_UPLOAD_RETRY_INTERVAL);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                HostStatsCollector.restoreContainerEventsFromPayload(payload);
+                return;
+            }
+        }
+        log.error("stats upload abandoned after {} attempts, window dropped (statsDate={})", STATS_UPLOAD_RETRY_TIMES, payload.getStatsDate());
+        HostStatsCollector.restoreContainerEventsFromPayload(payload);
+    }
+
+    /**
+     * 事件窗口采集任务（10 秒）：拉取与累积内聚在 {@link HostStatsCollector#pollContainerEvents()}
+     * （单请求读 daemon 内存环形缓冲；失败跳过本轮、窗口上界不推进、下轮无缝续拉，拉取间隔内不丢）。
+     */
+    public static class DockerEventTask implements Runnable {
+
+        @Override
+        public void run() {
+            HostStatsCollector.pollContainerEvents();
+        }
+    }
+
+    /**
+     * 检查并处理ops任务。
+     */
+    public static class ProcessOpsTask implements Runnable {
+
+        @Override
+        public void run() {
+            long start = SystemClock.now();
+            int taskAll = 0, taskSuccess = 0;
+            // 无 secret 时跳过任务拉取(尚未通过首次下发，避免每10秒产生401)。
+            if (StringUtils.isBlank(SecretStore.load())) {
+                return;
+            }
+            try {
+                ResponseData<List<OpsTask>> responseData = OpsAgentApi.getTaskList();
+                if (responseData.isNotSuccess()) {
+                    log.warn("GetTaskList Error: {}", responseData.getMsg());
+                } else {
+                    List<OpsTask> opsTaskList = responseData.getData();
+                    if (opsTaskList != null) {
+                        taskAll = opsTaskList.size();
+                        // 升级任务(planId==0 && containerId==0 && clusterId==0)排到最后执行，
+                        // 避免其 System.exit 丢弃同批次后续任务。
+                        OpsTask upgradeTask = null;
+                        for (OpsTask opsTask : responseData.getData()) {
+                            if (isUpgradeTask(opsTask)) {
+                                upgradeTask = opsTask;
+                                continue;
+                            }
+                            if (runOpsTask(opsTask)) {
+                                taskSuccess++;
+                            }
+                        }
+                        // 最后处理升级任务(若存在)。
+                        if (upgradeTask != null) {
+                            if (runOpsTask(upgradeTask)) {
+                                // 升级成功且结果已上报，退出进程，由外部机制(systemd/supervisor)重启新版本。
+                                log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
+                                System.exit(0);
+                            }
+                            log.error("uw-ops-agent self update failed or result was not reported; keep current process running.");
+                        }
+                    }
+                }
+            } catch (Throwable e) {
+                log.error(e.getMessage(), e);
+            }
+            log.info("ProcessOpsTask run {}/{} tasks finished in {}ms.", taskSuccess, taskAll, SystemClock.now() - start);
+
         }
     }
 
@@ -137,15 +308,6 @@ public class MainService {
     }
 
     /**
-     * 普通任务脚本执行超时：10分钟。
-     */
-    private static final long TASK_TIMEOUT_MILLIS = 600_000L;
-    /**
-     * 升级任务脚本执行超时：5分钟(下载二进制)。
-     */
-    private static final long UPGRADE_TIMEOUT_MILLIS = 300_000L;
-
-    /**
      * 执行任务脚本。普通任务默认10分钟超时，防止脚本 hang 住拖垮调度线程。
      *
      * @param opsTask
@@ -164,104 +326,18 @@ public class MainService {
         log.info("Shell command execute: \n{}", opsTask.getTaskScript());
         List<String> cmdlist = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", opsTask.getTaskScript()}, null, true, timeoutMillis);
         opsTask.setTaskResult(StringUtils.join(cmdlist, "\n"));
-        log.info("Shell receive results: \n{}", opsTask.getTaskResult());
+        //日志侧限长（全量结果在 taskResult 上报 Center，落库列容量 64K）：防大输出撑胖本机日志。
+        String resultForLog = opsTask.getTaskResult();
+        log.info("Shell receive results: \n{}", resultForLog != null && resultForLog.length() > 2000
+                ? resultForLog.substring(0, 2000) + "\n... [log truncated, full result reported to center]" : resultForLog);
         opsTask.setState(TaskState.SUCCEED.getValue());
-    }
-
-    /**
-     * 上传服务器信息的任务。
-     */
-    public static class UploadHostInfoTask implements Runnable {
-
-        @Override
-        public void run() {
-            long start = SystemClock.now();
-            try {
-                OpsAgentApi.uploadHostInfo(SystemInfoHelper.buildHostInfo());
-            } catch (Throwable e) {
-                log.error(e.getMessage(), e);
-            }
-            log.info("UploadHostInfoTask run finished in {}ms.", SystemClock.now() - start);
-        }
-    }
-
-    /**
-     * 上传服务器统计信息。
-     */
-    public static class UploadHostStatsTask implements Runnable {
-
-        @Override
-        public void run() {
-            //上传服务器统计信息。
-            long start = SystemClock.now();
-            try {
-                OpsAgentApi.uploadHostStats(SystemInfoHelper.buildHostStats());
-            } catch (Throwable e) {
-                log.error(e.getMessage(), e);
-            }
-            log.info("UploadHostStatsTask run finished in {}ms.", SystemClock.now() - start);
-
-        }
-    }
-
-    /**
-     * 检查并处理ops任务。
-     */
-    public static class ProcessOpsTask implements Runnable {
-
-
-        @Override
-        public void run() {
-            long start = SystemClock.now();
-            int taskAll = 0, taskSuccess = 0;
-            // 无 secret 时跳过任务拉取(尚未通过首次下发，避免每10秒产生401)。
-            if (StringUtils.isBlank(SecretStore.load())) {
-                return;
-            }
-            try {
-                ResponseData<List<OpsTask>> responseData = OpsAgentApi.getTaskList();
-                if (responseData.isNotSuccess()) {
-                    log.warn("GetTaskList Error: {}", responseData.getMsg());
-                } else {
-                    List<OpsTask> opsTaskList = responseData.getData();
-                    if (opsTaskList != null) {
-                        taskAll = opsTaskList.size();
-                        // 升级任务(planId==0 && instanceId==0 && clusterId==0)排到最后执行，
-                        // 避免其 System.exit 丢弃同批次后续任务。
-                        OpsTask upgradeTask = null;
-                        for (OpsTask opsTask : responseData.getData()) {
-                            if (opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0) {
-                                upgradeTask = opsTask;
-                                continue;
-                            }
-                            if (runOpsTask(opsTask)) {
-                                taskSuccess++;
-                            }
-                        }
-                        // 最后处理升级任务(若存在)。
-                        if (upgradeTask != null) {
-                            if (runOpsTask(upgradeTask)) {
-                                // 升级成功且结果已上报，退出进程，由外部机制(systemd/supervisor)重启新版本。
-                                log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
-                                System.exit(0);
-                            }
-                            log.error("uw-ops-agent self update failed or result was not reported; keep current process running.");
-                        }
-                    }
-                }
-            } catch (Throwable e) {
-                log.error(e.getMessage(), e);
-            }
-            log.info("ProcessOpsTask run {}/{} tasks finished in {}ms.", taskSuccess, taskAll, SystemClock.now() - start);
-
-        }
     }
 
     /**
      * 判断是否为 agent 自身升级任务。
      */
     private static boolean isUpgradeTask(OpsTask opsTask) {
-        return opsTask.getPlanId() == 0 && opsTask.getInstanceId() == 0 && opsTask.getClusterId() == 0;
+        return opsTask.getPlanId() == 0 && opsTask.getContainerId() == 0 && opsTask.getClusterId() == 0;
     }
 
     /**
@@ -318,7 +394,8 @@ public class MainService {
             executionSucceeded = true;
         } catch (Throwable e) {
             log.error(e.getMessage(), e);
-            opsTask.setTaskError(e.getMessage());
+            //NPE 等异常 message 为 null，兜底异常类名保证上报错误信息非空。
+            opsTask.setTaskError(e.getMessage() != null ? e.getMessage() : e.getClass().getName());
             opsTask.setState(TaskState.FAILED.getValue());
         } finally {
             opsTask.setFinishDate(SystemClock.nowDate());

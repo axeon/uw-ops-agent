@@ -1,34 +1,16 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 网络相关信息。
+ * 网卡窗口统计（每分钟 HostStats 上报，窗口平均速率）。
+ * 静态属性（mac/ip/speed/index）见 {@link NetworkInfo}，不随本类传输；
+ * 列表顺序按 index 升序（Center 取前两块作 net1/net2）。
  */
 public class NetworkStats {
-
-    /**
-     * 索引位置。
-     */
-    private int index;
 
     /**
      * 网卡设备
      */
     private String name;
-
-    /**
-     * 设备mac地址。
-     */
-    private String mac;
-
-    /**
-     * 网速
-     */
-    private long speed;
-
-    /**
-     * ip地址。
-     */
-    private String ip;
 
     /**
      * 发送速率
@@ -40,44 +22,12 @@ public class NetworkStats {
      */
     private long rxRate;
 
-    public int getIndex() {
-        return index;
-    }
-
-    public void setIndex(int index) {
-        this.index = index;
-    }
-
     public String getName() {
         return name;
     }
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getMac() {
-        return mac;
-    }
-
-    public void setMac(String mac) {
-        this.mac = mac;
-    }
-
-    public long getSpeed() {
-        return speed;
-    }
-
-    public void setSpeed(long speed) {
-        this.speed = speed;
-    }
-
-    public String getIp() {
-        return ip;
-    }
-
-    public void setIp(String ip) {
-        this.ip = ip;
     }
 
     public long getTxRate() {

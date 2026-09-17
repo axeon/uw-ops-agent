@@ -1,7 +1,8 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 磁盘信息
+ * 磁盘窗口统计（每分钟 HostStats 上报，差分值 + 即时队列长度）。
+ * 静态属性（model/serial/size）见 {@link DiskInfo}，不随本类传输。
  */
 public class DiskStats {
 
@@ -9,21 +10,6 @@ public class DiskStats {
      * 名称。
      */
     private String name;
-
-    /**
-     * 型号。
-     */
-    private String model;
-
-    /**
-     * 序列号。
-     */
-    private String serial;
-
-    /**
-     * 大小。
-     */
-    private long size;
 
     /**
      * 读取次数。
@@ -61,30 +47,6 @@ public class DiskStats {
 
     public void setName(String name) {
         this.name = name;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
-    }
-
-    public String getSerial() {
-        return serial;
-    }
-
-    public void setSerial(String serial) {
-        this.serial = serial;
-    }
-
-    public long getSize() {
-        return size;
-    }
-
-    public void setSize(long size) {
-        this.size = size;
     }
 
     public long getReads() {

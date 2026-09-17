@@ -58,6 +58,15 @@ class ShellCmdUtilsTest {
     }
 
     @Test
+    void shouldFailWhenBackgroundProcessHoldsOutputPipe() {
+        //进程秒退（waitFor 立即 true）但后台孙进程继承管道写端且不重定向：
+        //readLine 永久阻塞——排水预算必须让它失败而非挂死任务轮询线程（主机脱控）。
+        RuntimeException error = assertThrows(RuntimeException.class, () -> ShellCmdUtils.runNative(
+                new String[]{"/bin/sh", "-c", "sleep 30 & echo done"}, null, true, 5_000));
+        assertTrue(error.getMessage().contains("drain timeout"), error.getMessage());
+    }
+
+    @Test
     void shouldReuseOutputReaderThreadsAcrossCommands() {
         String[] command = new String[]{"/bin/sh", "-c", "sleep 0.1; echo completed"};
 

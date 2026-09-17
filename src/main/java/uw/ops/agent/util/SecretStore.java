@@ -2,8 +2,10 @@ package uw.ops.agent.util;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import uw.ops.agent.constant.Constants;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -12,6 +14,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -27,12 +30,7 @@ public final class SecretStore {
     private static final Logger log = LoggerFactory.getLogger(SecretStore.class);
 
     /**
-     * 默认密钥文件路径。
-     */
-    private static final Path DEFAULT_PATH = Paths.get("/etc/uw-ops-agent/agent.secret");
-
-    /**
-     * 密钥文件路径(可通过环境变量覆盖)。
+     * 密钥文件路径(环境变量 OPS_AGENT_SECRET_FILE 可覆盖，收口在 Constants)。
      */
     private static final Path SECRET_PATH = initSecretPath();
 
@@ -45,8 +43,7 @@ public final class SecretStore {
     }
 
     private static Path initSecretPath() {
-        String override = System.getenv("OPS_AGENT_SECRET_FILE");
-        return override != null && !override.isEmpty() ? Paths.get(override) : DEFAULT_PATH;
+        return Paths.get(Constants.getOpsAgentSecretFile());
     }
 
     /**
@@ -81,7 +78,7 @@ public final class SecretStore {
 
     /**
      * 原子保存密钥。
-     * 先写 tmp 文件、fsync、设置权限、再 rename 到目标路径。
+     * 以 0600 属性创建 tmp（无明文窗口）→ 写入并 fsync → 原子 rename 到目标路径。
      *
      * @param secret 密钥明文
      * @return 保存成功返回 true
@@ -106,17 +103,21 @@ public final class SecretStore {
                 Files.createDirectories(parent);
             }
             byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
-            Files.write(tmp, bytes);
-            try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.WRITE)) {
+            //以 0600 属性创建后写入并 fsync（Files.write 按 umask 创建存在短暂 0644 明文窗口）。
+            Set<PosixFilePermission> perms = new HashSet<>();
+            perms.add(PosixFilePermission.OWNER_READ);
+            perms.add(PosixFilePermission.OWNER_WRITE);
+            try (FileChannel channel = FileChannel.open(tmp,
+                    Set.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING),
+                    PosixFilePermissions.asFileAttribute(perms))) {
+                channel.write(ByteBuffer.wrap(bytes));
                 channel.force(true);
-            }
-            try {
-                Set<PosixFilePermission> perms = new HashSet<>();
-                perms.add(PosixFilePermission.OWNER_READ);
-                perms.add(PosixFilePermission.OWNER_WRITE);
-                Files.setPosixFilePermissions(tmp, perms);
             } catch (UnsupportedOperationException e) {
-                // 非POSIX文件系统(如Windows测试环境)，跳过权限设置。
+                //非POSIX文件系统(如Windows测试环境)：普通写入，权限设置跳过。
+                Files.write(tmp, bytes);
+                try (FileChannel channel = FileChannel.open(tmp, StandardOpenOption.WRITE)) {
+                    channel.force(true);
+                }
             }
             Files.move(tmp, secretPath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             return true;
@@ -137,12 +138,15 @@ public final class SecretStore {
      * 停止拉取任务，等待 Center 重新审核后再次领取。
      */
     public static synchronized void clear() {
-        cachedSecret = null;
+        //先删文件、成功后再清缓存：若先清缓存而删除失败，下次 load 会从磁盘读回密钥"复活"，
+        //disable 停拉任务的意图失效且陷入 401→clear→复活的循环。
         try {
-            java.nio.file.Files.deleteIfExists(SECRET_PATH);
+            Files.deleteIfExists(SECRET_PATH);
+            cachedSecret = null;
             log.info("agent secret cleared (host disabled by center).");
         } catch (IOException e) {
-            log.error("clear agent secret failed: {}", e.getMessage(), e);
+            //删除失败保留缓存（保持已 disable 状态可被 load 观察到），下轮 clear 重试。
+            log.error("clear agent secret failed, will retry on next round: {}", e.getMessage(), e);
         }
     }
 

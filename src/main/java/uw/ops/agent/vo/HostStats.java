@@ -2,11 +2,12 @@ package uw.ops.agent.vo;
 
 import uw.ops.agent.vo.sub.*;
 
+import java.util.Date;
 import java.util.List;
 
 /**
- * 设备运行统计信息。
- * 定时更新。
+ * 设备运行统计信息（60 秒窗口两点差分结果）。
+ * 比率类两位小数；NULL=失败/不完整/不适用，0=真实低值。
  */
 public class HostStats {
 
@@ -14,6 +15,13 @@ public class HostStats {
      * 设备唯一标识。
      */
     private String hostHash;
+
+    /**
+     * 统计时间（窗口结束时间，协议字段）：Center 落为 create_date，参与 (host_id, create_date) 幂等唯一键；
+     * 重试复用原 payload 保证不重复落库。本轮 inventory 失败时列表仅含事件兜底容器
+     * （Center 据成员构成推断快照成败：存在非 destroyed 成员即成功，失败时不动台账仅处理事件）。
+     */
+    private Date statsDate;
 
     /**
      * CPU统计信息。
@@ -31,7 +39,7 @@ public class HostStats {
     private LoadStats loadStats;
 
     /**
-     * 网络统计信息。
+     * TCP 连接状态统计信息。
      */
     private InternetStats internetStats;
 
@@ -51,14 +59,9 @@ public class HostStats {
     private List<NetworkStats> networkStatsList;
 
     /**
-     * Docker进程列表。
+     * 容器清单（inventory 全量容器快照）。
      */
-    private List<DockerPs> dockerPsList;
-
-    /**
-     * Docker进程列表。
-     */
-    private List<DockerStats> dockerStatsList;
+    private List<ContainerInfo> containerInfoList;
 
     public String getHostHash() {
         return hostHash;
@@ -66,6 +69,14 @@ public class HostStats {
 
     public void setHostHash(String hostHash) {
         this.hostHash = hostHash;
+    }
+
+    public Date getStatsDate() {
+        return statsDate;
+    }
+
+    public void setStatsDate(Date statsDate) {
+        this.statsDate = statsDate;
     }
 
     public CpuStats getCpuStats() {
@@ -124,19 +135,13 @@ public class HostStats {
         this.internetStats = internetStats;
     }
 
-    public List<DockerPs> getDockerPsList() {
-        return dockerPsList;
+    public List<ContainerInfo> getContainerInfoList() {
+        return containerInfoList;
     }
 
-    public void setDockerPsList(List<DockerPs> dockerPsList) {
-        this.dockerPsList = dockerPsList;
+    public void setContainerInfoList(List<ContainerInfo> containerInfoList) {
+        this.containerInfoList = containerInfoList;
     }
 
-    public List<DockerStats> getDockerStatsList() {
-        return dockerStatsList;
-    }
 
-    public void setDockerStatsList(List<DockerStats> dockerStatsList) {
-        this.dockerStatsList = dockerStatsList;
-    }
 }

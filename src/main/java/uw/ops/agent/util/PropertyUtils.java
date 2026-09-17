@@ -19,8 +19,8 @@ public class PropertyUtils {
     /**
      * 从字符串中加载Properties。
      *
-     * @param data
-     * @return
+     * @param data 键值对文本（每行 key=value）
+     * @return 解析结果（data 为 null/空时返回空 Properties；解析异常吞掉返回已解析部分）
      */
     public static Properties loadFromString(String data) {
         Properties properties = new Properties();
@@ -36,10 +36,10 @@ public class PropertyUtils {
     }
 
     /**
-     * 把Properties保存到字符串中。
+     * 把Properties保存到字符串中（每行 key=value）。
      *
-     * @param properties
-     * @return
+     * @param properties 键值对集合
+     * @return 键值对文本
      */
     public static String storeToString(Properties properties) {
         StringBuilder sb = new StringBuilder();

@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.umtone</groupId>
     <artifactId>uw-ops-agent</artifactId>
-    <version>1.2.0</version>
+    <version>1.5.0</version>
     <packaging>jar</packaging>
     <name>uw-ops-agent</name>
     <description>宿主机监控、任务执行与自升级 Agent</description>
@@ -23,6 +23,13 @@
             <groupId>com.umtone</groupId>
             <artifactId>uw-httpclient</artifactId>
             <version>2.3.6</version>
+        </dependency>
+        <!-- OpsAgentApi/ShellCmdUtils 直接使用 HmacUtils/JsonUtils 等（含 byte[][] 多段签名，
+             1.1.116 起含 byte[][] 多段签名重载（116 为新发版本，勿回退）），显式声明对齐 uw-base 源码版本。 -->
+        <dependency>
+            <groupId>com.umtone</groupId>
+            <artifactId>uw-common</artifactId>
+            <version>1.1.116</version>
         </dependency>
         <!-- ============ 第三方业务 SDK ============ -->
         <dependency>
@@ -52,6 +59,24 @@
     </dependencies>
 
     <build>
+        <resources>
+            <!-- project-info.properties 开启 filtering：pom 的 project.name/project.version 注入产品信息
+                 （其余资源不过滤，避免 native-image 元数据被占位符改写）。 -->
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>project-info.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>project-info.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

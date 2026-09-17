@@ -1,12 +1,10 @@
 package uw.ops.agent.vo;
 
-import uw.ops.agent.AgentInfo;
+import uw.ops.agent.constant.Constants;
 
-import java.util.Date;
 
 /**
- * 设备信息。
- * 启动时候更新一次，
+ * 设备信息（每小时上报一次；硬件信息开机基本不变，重报价值=IP/热插盘/改名自愈）。
  */
 public class HostInfo {
 
@@ -36,9 +34,9 @@ public class HostInfo {
     private String serialNumber;
 
     /**
-     * agentInfo。
+     * agent 标识（名称:版本，构建期由 pom 注入）。
      */
-    private String agentInfo = AgentInfo.AGENT_INFO;
+    private String agentInfo = Constants.getAgentInfo();
 
     /**
      * osInfo。
@@ -69,11 +67,6 @@ public class HostInfo {
      * ip信息。
      */
     private String networkInfo;
-
-    /**
-     * 启动时间。
-     */
-    private Date bootDate;
 
     public String getHostHash() {
         return hostHash;
@@ -171,11 +164,4 @@ public class HostInfo {
         this.networkInfo = networkInfo;
     }
 
-    public Date getBootDate() {
-        return bootDate;
-    }
-
-    public void setBootDate(Date bootDate) {
-        this.bootDate = bootDate;
-    }
 }

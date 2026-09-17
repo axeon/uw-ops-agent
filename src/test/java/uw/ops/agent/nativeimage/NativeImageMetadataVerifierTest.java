@@ -54,7 +54,7 @@ class NativeImageMetadataVerifierTest {
                     .map(reflection -> reflection.get("type"))
                     .filter(String.class::isInstance)
                     .map(String.class::cast)
-                    .anyMatch(type -> type.startsWith("uw.ops.agent.vo"));
+                    .anyMatch(type -> type.startsWith("uw.ops.agent.vo") || type.startsWith("uw.ops.agent.helper.vo"));
             assertFalse(hasManualApplicationModel);
         }
         assertNull(classLoader.getResource("META-INF/native-image/config/reflect-config.json"));

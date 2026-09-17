@@ -2,7 +2,7 @@
   "comment": [
     "Collected on Debian 12 for linux/arm64 and linux/amd64 with GraalVM CE 25.3.4.1 and JDK 25.0.4.1 on 2026-09-03.",
     "The two architecture results were identical except for the JNA native library resource; this file contains their union.",
-    "Application models under uw.ops.agent.vo are registered by AgentReflectionFeature."
+    "Application models under uw.ops.agent.vo and uw.ops.agent.helper.vo are registered by AgentReflectionFeature."
   ],
   "reflection": [
     {
