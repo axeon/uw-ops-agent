@@ -2,8 +2,10 @@ package uw.ops.agent.helper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.JsonNode;
 import uw.common.util.JsonUtils;
+import uw.common.util.SystemClock;
 import uw.ops.agent.constant.Constants;
 import uw.ops.agent.helper.vo.ContainerEventRaw;
 import uw.ops.agent.helper.vo.ContainerInspectRaw;
@@ -107,6 +109,32 @@ public class DockerInfoHelper {
      */
     private static volatile int timeoutMillis = 5000;
 
+    /** 当前执行线程的任务总截止时间，所有 Engine 请求共享；使用单调时钟防时间校正。 */
+    private static final ThreadLocal<Long> TASK_DEADLINE = new ThreadLocal<>();
+
+    /** 开始结构化任务的端到端预算，完成后必须清理线程局部状态。 */
+    static void beginTaskBudget(long budgetMillis) {
+        TASK_DEADLINE.set(System.nanoTime() + budgetMillis * 1_000_000L);
+    }
+
+    /** 清理任务预算，避免线程池复用时影响下一项任务或指标采集。 */
+    static void endTaskBudget() {
+        TASK_DEADLINE.remove();
+    }
+
+    /** 返回剩余预算；预算耗尽即失败，禁止继续产生 create/start 等副作用。 */
+    static long remainingTaskMillis() throws DockerApiException {
+        Long deadline = TASK_DEADLINE.get();
+        if (deadline == null) {
+            return Long.MAX_VALUE;
+        }
+        long remaining = deadline - System.nanoTime();
+        if (remaining <= 0) {
+            throw new DockerApiException("docker task budget exhausted.");
+        }
+        return Math.max(1L, remaining / 1_000_000L);
+    }
+
     /**
      * create 超时(毫秒)：daemon 在 create 时拉取镜像（多架构大镜像可达分钟级），按普通任务 10 分钟预算上限。
      */
@@ -156,17 +184,24 @@ public class DockerInfoHelper {
 
     /**
      * 自动探测的候选 socket 路径（docker 之外含 podman 的 Docker 兼容服务）：
-     * 当前地址（env 解析/测试注入）永远第一优先，以下为回退候选，按序去重追加。
+     * 当前地址（env 解析/测试注入）永远第一优先，以下为回退候选，按序去重追加
+     * （末位为 macOS Docker Desktop 开发环境的用户目录路径，生产 Linux 不受影响）。
      */
     private static final List<String> FALLBACK_SOCKETS = List.of(
             "/var/run/docker.sock",
             "/run/docker.sock",
-            "/run/podman/podman.sock");
+            "/run/podman/podman.sock",
+            System.getProperty("user.home") + "/.docker/run/docker.sock");
 
     /**
      * API 版本前缀(如 /v1.46)，协商失败为空串(无前缀路径，daemon 兼容)。
      */
     private static volatile String apiPrefix = "";
+
+    /**
+     * 最近一次失败重探时间戳(毫秒)：连接级失败触发地址重探的节流窗，避免每次请求都全候选探测。
+     */
+    private static volatile long lastRenegotiateAt = 0L;
 
     /**
      * stats/inspect 批量请求共享的固定并发线程池(并发 8，千级容器规模下单轮数百毫秒)。
@@ -224,7 +259,7 @@ public class DockerInfoHelper {
                 log.info("docker-compatible api detected at {} (apiVersion={})", candidate, apiVersion);
                 return;
             } catch (Exception e) {
-                log.debug("socket {} not usable: {}", candidate, e.getMessage());
+                log.debug("socket {} not usable, errorType={}", candidate, e.getClass().getSimpleName());
             }
         }
         //全部失败：回退默认路径，保留后续请求失败告警语义。
@@ -325,15 +360,126 @@ public class DockerInfoHelper {
                 events.add(JsonUtils.parse(trimmed, ContainerEventRaw.class));
             } catch (Exception e) {
                 //单行损坏跳过，不拖垮整窗。
-                log.warn("skip malformed event line: {}", e.getMessage());
+                log.warn("skip malformed event line, errorType={}", e.getClass().getSimpleName());
             }
         }
         return events;
     }
 
     /**
+     * 拉取超时(毫秒)：多架构大镜像分层下载分钟级，按普通任务 10 分钟预算留出 create/start 余量。
+     */
+    private static final int PULL_TIMEOUT_MILLIS = 480_000;
+
+    /**
+     * 镜像准备：本地不存在则按确定引用拉取（F02）。
+     * <p>
+     * Docker Engine API 的 /containers/create <b>不具备</b> docker CLI run 的自动拉取行为——
+     * 本地无镜像直接 404（新主机/清理镜像后重建/发布新 digest 都会在 create 阶段失败），
+     * 故 create 前必须显式确保镜像存在。凭据随任务下发（center 领取时按镜像域名注入
+     * X-Registry-Auth=base64 json），用后即弃——不落盘、不进日志。
+     *
+     * @param imageRef     确定镜像引用（name:tag 或 name@digest）
+     * @param registryAuth registry 拉取凭据（base64，null=匿名拉取；Engine API 不读取 CLI 登录配置）
+     */
+    public static void ensureImage(String imageRef, String registryAuth) throws DockerApiException {
+        if (imageRef == null || imageRef.isEmpty()) {
+            return;
+        }
+        if (imageExists(imageRef)) {
+            return;
+        }
+        pullImage(imageRef, registryAuth);
+    }
+
+    /**
+     * 本地镜像存在性检查：GET /images/{ref}/json，200=存在；404（镜像不存在）=false；
+     * 其余异常（daemon 不可达等）上抛由调用方按任务失败处理。
+     *
+     * @param imageRef 镜像引用
+     * @return true=本地已存在
+     */
+    public static boolean imageExists(String imageRef) throws DockerApiException {
+        try {
+            execute("/images/" + urlEncode(imageRef) + "/json");
+            return true;
+        } catch (ContainerNotFoundException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 拉取镜像：POST /images/create?fromImage=&amp;tag=（digest 引用 fromImage=repo@digest 不带 tag，
+     * tag 引用拆分 name/tag，无 tag 补 latest）。
+     * <p>
+     * 响应为逐行 JSON 事件流（status/progress/error）——认证失败/tag 不存在等以
+     * {"error": "..."} 行报告（HTTP 状态仍 200），全量读取后逐行检查 error 字段；
+     * 非事件流响应体、空事件流或任意错误事件均失败，不将未知响应当作拉取成功。
+     * 凭据经 X-Registry-Auth 头传递，不进日志。
+     *
+     * @param imageRef     确定镜像引用
+     * @param registryAuth registry 拉取凭据（base64，null=匿名）
+     */
+    public static void pullImage(String imageRef, String registryAuth) throws DockerApiException {
+        String fromImage;
+        String tag = null;
+        if (imageRef.contains("@")) {
+            //digest 引用整体作 fromImage（已锁定内容，无需 tag）。
+            fromImage = imageRef;
+        } else {
+            int colon = imageRef.lastIndexOf(':');
+            int slash = imageRef.lastIndexOf('/');
+            if (colon > slash) {
+                fromImage = imageRef.substring(0, colon);
+                tag = imageRef.substring(colon + 1);
+            } else {
+                fromImage = imageRef;
+                tag = "latest";
+            }
+        }
+        StringBuilder path = new StringBuilder("/images/create?fromImage=").append(urlEncode(fromImage));
+        if (tag != null) {
+            path.append("&tag=").append(urlEncode(tag));
+        }
+        long start = SystemClock.now();
+        byte[] body = execute("POST", path.toString(), null, PULL_TIMEOUT_MILLIS, STATUS_OK,
+                "X-Registry-Auth", registryAuth);
+        //逐行解析事件流，error 字段非空即拉取失败（详细原因只进日志，凭据不外泄）。
+        String text = new String(body, StandardCharsets.UTF_8);
+        boolean hasEvent = false;
+        for (String line : text.split("\n")) {
+            if (line.isBlank()) {
+                continue;
+            }
+            try {
+                Map<String, Object> event = JsonUtils.parse(line, new TypeReference<Map<String, Object>>() {
+                });
+                if (event == null || event.isEmpty()) {
+                    throw new DockerApiException("image pull response invalid.");
+                }
+                hasEvent = true;
+                Object error = event.get("error");
+                if (error instanceof String s && !s.isEmpty()) {
+                    throw new DockerApiException("image pull failed: " + imageRef + ", err=" + s);
+                }
+                if (event.get("errorDetail") instanceof Map<?, ?> detail && !detail.isEmpty()) {
+                    throw new DockerApiException("image pull failed: " + imageRef);
+                }
+            } catch (DockerApiException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new DockerApiException("image pull response invalid.");
+            }
+        }
+        if (!hasEvent) {
+            throw new DockerApiException("image pull response empty.");
+        }
+        log.info("image pulled: {} in {}ms", imageRef, SystemClock.now() - start);
+    }
+
+    /**
      * 创建容器（POST /containers/create?name=），不指定平台（daemon 按主机架构选择）。
-     * 镜像本地不存在时 daemon 会先拉取，超时按 10 分钟任务预算；
+     * 镜像存在性由调用方（结构化执行器）经 {@link #ensureImage} 预先确保——create 本身不拉取镜像；
      * 同名容器已存在时 daemon 返回 409，由调用方（结构化执行器）先做幂等清理。
      *
      * @param containerName 容器名（uw-ops-{containerId}，URL 编码前做安全字符校验）
@@ -392,7 +538,7 @@ public class DockerInfoHelper {
 
     /**
      * 删除容器（DELETE /containers/{id}?force=1&v=1，强制删含卷）。仅用于结构化 START 的幂等重建前置
-     * （对齐模板 start 脚本头部的 stop+rm 清理行）；常规 STOP 保留容器现场，不调用本方法。
+     * （对齐模板 start 脚本头部的 stop+rm 清理行）和常规 STOP，确认停止后删除残留。
      *
      * @param containerId 容器完整 Id 或名称
      */
@@ -406,16 +552,31 @@ public class DockerInfoHelper {
      * （/ ? & 空格等会破坏手工拼接的请求行）。
      */
     private static void requireSafeToken(String token) throws DockerApiException {
+        if (!isSafeIdToken(token)) {
+            throw new DockerApiException(token == null || token.isEmpty()
+                    ? "container name/id is blank" : "illegal container name/id: " + token);
+        }
+    }
+
+    /**
+     * 容器名/Id 安全线程令牌判定（唯一字符集来源：URL 路径段与持久化文件名共用）：
+     * 非空且仅含字母数字与 . _ -。
+     *
+     * @param token 待判定令牌
+     * @return 安全返回 true
+     */
+    public static boolean isSafeIdToken(String token) {
         if (token == null || token.isEmpty()) {
-            throw new DockerApiException("container name/id is blank");
+            return false;
         }
         for (int i = 0; i < token.length(); i++) {
             char c = token.charAt(i);
             boolean allowed = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '_' || c == '-';
             if (!allowed) {
-                throw new DockerApiException("illegal container name/id: " + token);
+                return false;
             }
         }
+        return true;
     }
 
     /**
@@ -480,7 +641,7 @@ public class DockerInfoHelper {
                     log.debug("docker batch item cancelled by round budget");
                 } catch (ExecutionException e) {
                     // 单容器失败已被 call 内部抛出，这里吞掉：该容器本轮性能置 NULL。
-                    log.debug("docker batch item failed: {}", e.getCause() == null ? e.getMessage() : e.getCause().getMessage());
+                    log.debug("docker batch item failed, errorType={}", e.getClass().getSimpleName());
                 }
             }
         } catch (InterruptedException e) {
@@ -538,8 +699,24 @@ public class DockerInfoHelper {
      * @return 响应体字节
      */
     private static byte[] execute(String method, String path, byte[] body, int requestTimeoutMillis, int[] successCodes) throws DockerApiException {
+        return execute(method, path, body, requestTimeoutMillis, successCodes, null, null);
+    }
+
+    /**
+     * 执行一次请求（可带一个额外头，如 X-Registry-Auth）：头值在此统一校验
+     * （CRLF 注入防护内聚在 HTTP 层，调用方只传结构化名值对）。
+     *
+     * @param extraHeaderName  额外头名（null=无）
+     * @param extraHeaderValue 额外头值（null=不携带；含 CR/LF 时拒绝请求）
+     */
+    private static byte[] execute(String method, String path, byte[] body, int requestTimeoutMillis, int[] successCodes,
+                                  String extraHeaderName, String extraHeaderValue) throws DockerApiException {
+        if (extraHeaderName != null && extraHeaderValue != null
+                && (extraHeaderValue.contains("\r") || extraHeaderValue.contains("\n"))) {
+            throw new DockerApiException("invalid extra header value: " + extraHeaderName);
+        }
         String fullPath = apiPrefix + path;
-        long deadline = System.nanoTime() + requestTimeoutMillis * 1_000_000L;
+        long deadline = System.nanoTime() + Math.min(requestTimeoutMillis, remainingTaskMillis()) * 1_000_000L;
         try (SocketChannel channel = SocketChannel.open(StandardProtocolFamily.UNIX);
              Selector selector = Selector.open()) {
             channel.configureBlocking(false);
@@ -553,24 +730,43 @@ public class DockerInfoHelper {
                     throw new DockerApiException("connect failed: " + address.getPath());
                 }
             }
-            //发送请求。
-            byte[] requestBytes = buildRequest(method, fullPath, body);
+            byte[] requestBytes = buildRequest(method, fullPath, body, extraHeaderName, extraHeaderValue);
             writeFully(channel, selector, ByteBuffer.wrap(requestBytes), deadline);
-            //读取完整响应。
             return readResponse(channel, selector, deadline, successCodes);
         } catch (DockerApiException e) {
             throw e;
         } catch (Exception e) {
+            //连接级失败(socket 不存在/daemon 重启换了路径)重探地址：启动时一次性锁定会在
+            //Docker Desktop 重启后永久连死路径，这里节流 30s 重探自愈。
+            renegotiateOnConnectFailure();
             throw new DockerApiException("uds request failed: " + method + " " + fullPath + ", err=" + e, e);
         }
     }
 
     /**
-     * 拼请求报文：请求行 + 固定头 +（有体时）Content-Type/Content-Length + 空行 + 体。
+     * 连接级失败后的地址重探（30 秒节流）：候选 socket 文件存在性可能已变化
+     * （Docker Desktop 重启后 /var/run 符号链接或用户目录 socket 重新出现），
+     * 重新按候选序探测锁定。并发请求下 volatile 时间戳天然限频，重探本身幂等。
      */
-    private static byte[] buildRequest(String method, String path, byte[] body) {
+    private static void renegotiateOnConnectFailure() {
+        long now = System.currentTimeMillis();
+        if (now - lastRenegotiateAt < 30_000L) {
+            return;
+        }
+        lastRenegotiateAt = now;
+        negotiateApiVersion();
+    }
+
+    /**
+     * 拼请求报文：请求行 + 固定头 +（有体时）Content-Type/Content-Length + 空行 + 体。
+     * 可带一个额外头（registry 拉取凭据等通道头，值已由 execute 层校验，凭据值不进日志）。
+     */
+    private static byte[] buildRequest(String method, String path, byte[] body, String extraHeaderName, String extraHeaderValue) {
         StringBuilder head = new StringBuilder(160);
         head.append(method).append(' ').append(path).append(" HTTP/1.1\r\nHost: docker\r\nAccept: application/json\r\nConnection: close\r\n");
+        if (extraHeaderName != null && extraHeaderValue != null) {
+            head.append(extraHeaderName).append(": ").append(extraHeaderValue).append("\r\n");
+        }
         if (body != null) {
             head.append("Content-Type: application/json\r\nContent-Length: ").append(body.length).append("\r\n");
         }

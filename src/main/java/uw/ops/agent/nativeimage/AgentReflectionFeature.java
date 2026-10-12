@@ -19,8 +19,9 @@ import java.util.stream.Stream;
  * 构建期递归扫描 {@link #MODEL_PACKAGES} 各模型包（含 vo.sub 等全部子包）下的类，
  * 为每个模型类注册 declared 构造器/方法/字段与数组类——这是 Jackson 在 native 运行时
  * 绑定协议 vo（上下行 JSON）与 Engine API 响应 vo 的反射前提。
- * 模型包按"参与 JSON 绑定"划分：{@code uw.ops.agent.vo}（上报/下行协议）与
- * {@code uw.ops.agent.helper.vo}（Engine API 输入形状 *Raw）。helper.vo 内与形状类
+ * 模型包按"参与 JSON 绑定"划分：{@code uw.ops.agent.vo}（上报/下行协议，含任务统一载荷
+ * 契约 TaskData）与 {@code uw.ops.agent.helper.vo}（Engine API 输入形状 *Raw）。
+ * helper.vo 内与形状类
  * 同居的差分快照（*Counters）不参与 JSON，注册以包为单位会被连带登记——
  * 仅多几十 KB 镜像元数据、无运行时影响，是结构统一下可接受的取舍。
  * <p>
@@ -38,7 +39,8 @@ import java.util.stream.Stream;
 public final class AgentReflectionFeature implements Feature {
 
     /**
-     * JSON 模型包（递归扫描子包）：协议 vo 与 Docker Engine API 输入 vo。
+     * JSON 模型包（递归扫描子包）：协议 vo 与 Docker Engine API 输入 vo
+     * （任务统一载荷契约 TaskData 位于 uw.ops.agent.vo，随包覆盖）。
      */
     private static final String[] MODEL_PACKAGES = {"uw.ops.agent.vo", "uw.ops.agent.helper.vo"};
 

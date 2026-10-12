@@ -2,6 +2,7 @@ package uw.ops.agent.helper.vo;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
@@ -245,10 +246,12 @@ public class ContainerStatsRaw {
         private Long current;
 
         /**
-         * pids 限额（0=未设）。
+         * pids 限额原始值：daemon 对"未设限额"返回 uint64 最大值(18446744073709551615，
+         * 超出 long 范围，直接绑 long 会 InputCoercionException 拖垮整个 stats 解析)，
+         * 用 BigInteger 承接，读取时归一化为 0=未设。
          */
         @JsonProperty("limit")
-        private Long limit;
+        private BigInteger limit;
 
         public Long getCurrent() {
             return current;
@@ -259,10 +262,18 @@ public class ContainerStatsRaw {
         }
 
         public Long getLimit() {
-            return limit;
+            if (limit == null) {
+                return null;
+            }
+            //uint64 最大值（或负值等异常）= 未设限额，归一化为 -1（Linux 惯例：-1=无限制，
+            // 如 RLIM_INFINITY；JSON 数字层面超 long 范围必须 BigInteger 承接，无后处理映射机会）。
+            if (limit.signum() < 0 || limit.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                return -1L;
+            }
+            return limit.longValue();
         }
 
-        public void setLimit(Long limit) {
+        public void setLimit(BigInteger limit) {
             this.limit = limit;
         }
     }

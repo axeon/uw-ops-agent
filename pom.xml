@@ -15,6 +15,8 @@
         <maven.compiler.release>25</maven.compiler.release>
         <graalvm.version>25.3.4.1</graalvm.version>
         <junit.version>6.1.3</junit.version>
+        <test.agent.secret-file>${project.build.directory}/test-agent/agent.secret</test.agent.secret-file>
+        <test.agent.probe-dir>${project.build.directory}/test-agent/probe</test.agent.probe-dir>
     </properties>
 
     <dependencies>
@@ -78,6 +80,17 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.4</version>
+                <configuration>
+                    <environmentVariables>
+                        <OPS_AGENT_SECRET_FILE>${test.agent.secret-file}</OPS_AGENT_SECRET_FILE>
+                        <OPS_AGENT_PROBE_DIR>${test.agent.probe-dir}</OPS_AGENT_PROBE_DIR>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>

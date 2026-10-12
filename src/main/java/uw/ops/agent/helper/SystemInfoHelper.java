@@ -118,7 +118,7 @@ public class SystemInfoHelper {
      * 虚拟网卡命名判定：lo/docker/veth/br-/vmnet/virbr/tun/tap 前缀。
      */
     private static boolean isVirtualNicName(String netName) {
-        return netName.startsWith("lo") || netName.startsWith("docker") || netName.startsWith("veth") ||
+        return netName.startsWith("lo") || netName.startsWith("container") || netName.startsWith("veth") ||
                 netName.startsWith("br-") || netName.startsWith("vmnet") || netName.startsWith("virbr") ||
                 netName.startsWith("tun") || netName.startsWith("tap");
     }
@@ -155,7 +155,10 @@ public class SystemInfoHelper {
         hostInfo.setMachineModel(computerSystem.getModel());
         hostInfo.setSerialNumber(computerSystem.getSerialNumber());
         hostInfo.setOsInfo(os.toString());
-        hostInfo.setCpuInfo(getProcessorInfo(hal.getProcessor()));
+        CentralProcessor processor = hal.getProcessor();
+        hostInfo.setCpuInfo(getProcessorInfo(processor));
+        int logicalCount = processor.getLogicalProcessorCount();
+        hostInfo.setCpuLogicalCount(logicalCount > 0 ? logicalCount : null);
         hostInfo.setMemInfo(getMemoryInfo(hal.getMemory()));
         List<DiskInfo> diskInfoList = buildDiskInfoList();
         hostInfo.setDiskInfo(JsonUtils.toString(diskInfoList));
@@ -228,11 +231,9 @@ public class SystemInfoHelper {
     private static List<NetworkIF> filterPhysicalNetworkIFs() {
         List<NetworkIF> list = new ArrayList<>();
         for (NetworkIF net : hal.getNetworkIFs(false)) {
-            // 无 IPv4 的网卡不参与监控计数。
             if (net.getIPv4addr().length == 0) {
                 continue;
             }
-            // 虚拟网卡不参与监控计数。
             if (isVirtualNicName(net.getName())) {
                 continue;
             }
@@ -311,12 +312,10 @@ public class SystemInfoHelper {
      * @return 负载统计
      */
     public static LoadStats buildLoadStats() {
-        //计算电源功率
         double power = 0.0d;
         for (PowerSource ps : hal.getPowerSources()) {
             power += ps.getPowerUsageRate();
         }
-        //计算负载计数
         double[] loadAverage = hal.getProcessor().getSystemLoadAverage(3);
         return new LoadStats(os.getSystemUptime(), Math.round(100 * loadAverage[0]) / 100d, Math.round(100 * loadAverage[1]) / 100d, Math.round(100 * loadAverage[2]) / 100d, (long) power, os.getProcessCount(), os.getThreadCount());
     }

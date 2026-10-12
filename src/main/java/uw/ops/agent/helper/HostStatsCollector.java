@@ -36,16 +36,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 与上次激发保存的"当前数值"做差即得刚结束窗口的精确均值，返回上报对象——差分完新值设为当前值。
  * <ul>
  *   <li>累计计数两点差 = 精确满窗均值（非近似）；窗口 = 相邻激发间隔（fixedRate 恒定 60s）；</li>
- *   <li>差分有效条件：gap ∈ [45s, 90s]；计数回退（Δ&lt;0，容器重启）非负钳 0；主机 tick 回退 = 重启，整组 NULL；</li>
+ *   <li>差分有效条件：gap ∈ [45s, 90s]；容器计数回退（Δ&lt;0）对应字段 NULL；主机 tick 回退时整组 NULL；</li>
  *   <li>容器视图三合一：observed（inventory）+ 窗口统计（stats 差分）+ 事件（10s 轮累积）全部聚合在
  *       ContainerInfo 上，容器 hash 全链路只传一遍；事件容器不在存活快照时以 state=destroyed
  *       兜底 info 承载（--rm 秒退等瞬时容器的事件不丢，状态语义统一走 state 字段）；</li>
- *   <li>inventoryOk=false（本轮快照失败）：payload 仍含事件兜底容器，Center 只处理事件不动台账；</li>
- *   <li>容器计数全基本类型（toContainerCounters 缺失按 0，差分钳 0）：差分失效（无基准/gap 越界）
- *       字段输出 0，未采集由行级存在性表达（statsList=null）；主机侧组级缺失走 NULL：CPU 组无效
- *       整组 NULL、磁盘/网卡组仅骨架。</li>
+ *   <li>inventory 失败（本轮快照失败）：payload 仍含事件兜底容器，Center 据成员构成推断快照
+ *       成败（存在非 destroyed 成员即成功；全为 destroyed 时只处理事件不动台账）；</li>
+ *   <li>容器计数和统计保留字段级 NULL：缺失、差分失效（无基准/gap 越界）、回退和不适用
+ *       不伪装为零；真实零值原样上报。主机 CPU 组无效整组 NULL，磁盘/网卡沿用既有骨架协议。</li>
  * </ul>
- * 线程模型：buildHostStats 主轮单线程；recordContainerEvents 由独立 events 任务并发调用
+ * 线程模型：buildHostStats 主轮单线程；pollContainerEvents 由独立 events 任务并发调用
  * （pendingEvents synchronized 保护跨线程）。
  * <p>
  * 静态单例设计（agent 进程内唯一差分器）：状态为类级 static，方法全 static 直调，调用方无需持有实例。
@@ -114,7 +114,7 @@ public class HostStatsCollector {
     /**
      * 主轮唯一入口（60s 激发）：一次完成 inventory 拉取 → running 容器 stats 批量 →
      * Host 边界采集 → 差分与事件合并组装，返回上报对象。各采集环节独立降级（inventory 失败
-     * 置 inventoryOk=false、单容器 stats 失败该项 NULL），返回全新窗口对象——上报失败的
+     * 时 payload 仅含事件兜底容器、单容器 stats 失败该项 NULL），返回全新窗口对象——上报失败的
      * 重试由调用方在发送层当场处理（全败回灌走 {@link #restoreContainerEventsFromPayload}）。
      */
     public static HostStats buildHostStats() {
@@ -123,7 +123,7 @@ public class HostStatsCollector {
         try {
             inventory = DockerInfoHelper.listAllContainers();
         } catch (Throwable e) {
-            log.warn("docker inventory failed: {}", e.getMessage());
+            log.warn("docker inventory failed: {}", e.getClass().getSimpleName());
         }
         //② running 容器 stats（差分第二点），整轮 12s 预算；失败容器缺省（该项 NULL）。
         Map<String, ContainerStatsRaw> statsMap = null;
@@ -137,7 +137,7 @@ public class HostStatsCollector {
                 }
                 statsMap = DockerInfoHelper.containerStatsBatch(runningIds);
             } catch (Throwable e) {
-                log.error("stats collection failed: {}", e.getMessage(), e);
+                log.error("stats collection failed: {}", e.getClass().getSimpleName());
             }
         }
         //③ 差分与事件合并组装（Host 边界快照在组装内部采集，与 stats 同刻 δ=0）。
@@ -151,12 +151,11 @@ public class HostStatsCollector {
      */
     public static void pollContainerEvents() {
         long untilNano = SystemClock.now() * 1_000_000L;
-        //窗口起点：有上界从上界无缝续拉；首轮回看 70s 覆盖 agent 启动间隙（进程未运行期间的事件不丢）。
         long sinceNano = lastEventNano != 0 ? lastEventNano : untilNano - FIRST_EVENT_WINDOW_LOOKBACK_NANOS;
         try {
             recordContainerEvents(DockerInfoHelper.containerEvents(sinceNano, untilNano), untilNano);
         } catch (Throwable e) {
-            log.warn("docker events poll failed, skip this round: {}", e.getMessage());
+            log.warn("docker events poll failed, skip this round: {}", e.getClass().getSimpleName());
         }
     }
 
@@ -256,7 +255,7 @@ public class HostStatsCollector {
      * 每轮调用必产出新对象——上报失败的重试由 MainService 在发送层当场处理，与本方法无关。
      *
      * @param hostHash  主机标识
-     * @param inventory 本轮容器清单（null=本轮 inventory 失败，payload 置 inventoryOk=false）
+     * @param inventory 本轮容器清单（null=本轮 inventory 失败，payload 仅含事件兜底容器）
      * @param statsMap  本轮容器 stats（containerId -> 快照；失败容器缺省）
      * @return 全新窗口上报对象
      */
@@ -280,6 +279,8 @@ public class HostStatsCollector {
             }
         }
         Map<String, ContainerInfo> views = new HashMap<>(inventory != null ? inventory.size() * 2 : 16);
+        //探针 label 收集（仅携带 uw.ops.probe 的容器，通常为受管子集）：声明式收敛的输入。
+        Map<String, Map<String, String>> probeLabelsById = inventory == null ? null : new HashMap<>();
         if (inventory != null) {
             for (ContainerSummaryRaw summary : inventory) {
                 //inventory 投影：Names 取首个并剥离前导斜杠；Created 为 unix 秒（异常值<=0 置 null 由消费方兜底）。
@@ -290,7 +291,15 @@ public class HostStatsCollector {
                     info.setName(name != null && name.startsWith("/") ? name.substring(1) : name);
                 }
                 info.setImage(summary.getImage());
-                info.setCommand(summary.getCommand());
+                //受管容器命令可能含运行时展开的秘密，存量容器也不能经 inventory 回流入库。
+                //屏蔽范围=受管容器（label uw.ops.container-id）与明确标记敏感的非受管容器；
+                //普通手工容器仍保留命令展示。
+                Map<String, String> labels = summary.getLabels();
+                boolean masked = labels != null && (labels.containsKey(StructuredTaskExecutor.LABEL_CONTAINER_ID)
+                        || "true".equals(labels.get(StructuredTaskExecutor.LABEL_SENSITIVE)));
+                if (!masked) {
+                    info.setCommand(summary.getCommand());
+                }
                 info.setCreateDate(summary.getCreated() != null && summary.getCreated() > 0 ? new Date(summary.getCreated() * 1000L) : null);
                 info.setState(summary.getState());
                 info.setStatus(summary.getStatus());
@@ -301,10 +310,21 @@ public class HostStatsCollector {
                 if (stats != null) {
                     info.setStatsList(List.of(stats));
                 }
+                //就绪探测结果随窗上报（null=不在探测集合，字段省略，Center 不动台账）。
+                ReadinessProber.applyResult(info);
                 views.put(info.getId(), info);
+                //探针 label 收集（center 受信终值 DSL，声明式下发通道）。
+                Map<String, String> summaryLabels = summary.getLabels();
+                if (summaryLabels != null && summaryLabels.containsKey(StructuredTaskExecutor.LABEL_PROBE)) {
+                    probeLabelsById.put(info.getId(), summaryLabels);
+                }
             }
             //容器差分基准同步清理（消失容器移除）：present 集即 views 的 key 集，无需另建 HashSet。
             lastContainerCounters.keySet().retainAll(views.keySet());
+            //就绪探测条目同轮对账清理（inventory 失败轮不进此分支，天然不清理）。
+            ReadinessProber.retainPresent(views.keySet());
+            //探针 label 声明式收敛：label 在=配置在/值变=条目更新/label 消失=label 条目移除。
+            ReadinessProber.applyInventoryLabels(probeLabelsById, StructuredTaskExecutor.LABEL_PROBE);
         }
         boolean hostGapValid = prevBoundary != null && gapValid(prevBoundary.monoNanos, boundary.monoNanos);
         HostStats stats = new HostStats();
@@ -360,138 +380,152 @@ public class HostStatsCollector {
     }
 
     /**
-     * 单容器差分：均值/速率 = 两点差 ÷ gap 秒；mem/pid = 末值；无基准或 gap 无效 → 差分字段缺省 0；回退（重启）非负钳制。
+     * 单容器差分：无基准、窗口越界、计数缺失或回退时相关字段为 NULL，真实零差值保留 0。
+     * 内存/进程是末值，可独立于差分窗口有效；单个子系统缺失不影响其余可测指标。
      */
     private static ContainerInfo.Stats diffContainer(ContainerCounters prev, ContainerCounters curr) {
         ContainerInfo.Stats stats = new ContainerInfo.Stats();
-        //末值快照：working set = usage - cache(v1)/inactive_file(v2，toContainerCounters 归一进 memCache)。
-        stats.setMemUsage(Math.max(curr.memUsage - curr.memCache, 0));
-        stats.setMemTotal(curr.memLimit);
-        if (curr.memLimit > 0) {
+        if (knownCounter(curr.memUsage) && knownCounter(curr.memCache)) {
+            stats.setMemUsage(Math.max(curr.memUsage - curr.memCache, 0));
+        }
+        stats.setMemTotal(knownCounter(curr.memLimit) ? curr.memLimit : null);
+        if (stats.getMemUsage() != null && curr.memLimit != null && curr.memLimit > 0) {
             stats.setMemPercent(round2(stats.getMemUsage() * 100.0 / curr.memLimit));
         }
-        stats.setPidCount((int) curr.pidCount);
-        stats.setPidsLimit(curr.pidsLimit > 0 ? curr.pidsLimit : 0L);
-        //两点差分。
-        if (prev == null) {
-            return stats;
+        if (knownCounter(curr.pidCount) && curr.pidCount <= Integer.MAX_VALUE) {
+            stats.setPidCount(curr.pidCount.intValue());
         }
-        if (!gapValid(prev.monoNanos, curr.monoNanos)) {
-            return stats;
-        }
+        //-1 是 daemon 明确报告的无限额；缺字段保持 NULL，不能伪造为无限额。
+        stats.setPidsLimit(curr.pidsLimit);
+        if (prev == null || !gapValid(prev.monoNanos, curr.monoNanos)) { return stats; }
         double seconds = (curr.monoNanos - prev.monoNanos) / 1_000_000_000.0;
-        //cpu_load：单核口径可超 100%，×10 = milliCores。
-        long cpuDiff = delta(curr.cpuTotalUsage, prev.cpuTotalUsage);
-        stats.setCpuPercent(round2(cpuDiff / 1_000_000_000.0 / seconds * 100));
-        //throttle 时长占比（0-100）与频率：CFS 周期在走（periodsDelta>0）即输出，
-        //无配额容器 throttledNanos 恒 0 输出 0%，与真实低值不冲突。
-        long periodsDelta = delta(curr.periods, prev.periods);
-        if (periodsDelta > 0) {
-            long throttled = delta(curr.throttledNanos, prev.throttledNanos);
-            stats.setCpuThrottle(Math.max(0, Math.min(100, round2(throttled / 1_000_000_000.0 / seconds * 100))));
-            long throttledPeriods = delta(curr.throttledPeriods, prev.throttledPeriods);
-            stats.setCpuThrottleFreq(round2(throttledPeriods * 100.0 / periodsDelta));
+        Long cpuDiff = counterDelta(curr.cpuTotalUsage, prev.cpuTotalUsage);
+        if (cpuDiff != null) {
+            stats.setCpuPercent(round2(cpuDiff / 1_000_000_000.0 / seconds * 100));
         }
-        //网络：任一点无 networks 块（host 模式/中途切换）→ 不输出；有则非负钳制求速率。
+        Long periodsDelta = counterDelta(curr.periods, prev.periods);
+        if (periodsDelta != null && periodsDelta > 0) {
+            Long throttled = counterDelta(curr.throttledNanos, prev.throttledNanos);
+            if (throttled != null) {
+                stats.setCpuThrottle(Math.min(100, round2(throttled / 1_000_000_000.0 / seconds * 100)));
+            }
+            Long throttledPeriods = counterDelta(curr.throttledPeriods, prev.throttledPeriods);
+            if (throttledPeriods != null && throttledPeriods <= periodsDelta) {
+                stats.setCpuThrottleFreq(round2(throttledPeriods * 100.0 / periodsDelta));
+            }
+        }
         if (prev.networksPresent && curr.networksPresent) {
-            stats.setNetworkIn(Math.round(delta(curr.netRx, prev.netRx) / seconds));
-            stats.setNetworkOut(Math.round(delta(curr.netTx, prev.netTx) / seconds));
-            stats.setRxDropped(delta(curr.rxDropped, prev.rxDropped));
-            stats.setTxDropped(delta(curr.txDropped, prev.txDropped));
-            stats.setRxErrors(delta(curr.rxErrors, prev.rxErrors));
-            stats.setTxErrors(delta(curr.txErrors, prev.txErrors));
+            stats.setNetworkIn(counterRate(curr.netRx, prev.netRx, seconds));
+            stats.setNetworkOut(counterRate(curr.netTx, prev.netTx, seconds));
+            stats.setRxDropped(counterDelta(curr.rxDropped, prev.rxDropped));
+            stats.setTxDropped(counterDelta(curr.txDropped, prev.txDropped));
+            stats.setRxErrors(counterDelta(curr.rxErrors, prev.rxErrors));
+            stats.setTxErrors(counterDelta(curr.txErrors, prev.txErrors));
         }
-        //磁盘：blkio 窗口平均速率。
-        stats.setDiskRead(Math.round(delta(curr.diskRead, prev.diskRead) / seconds));
-        stats.setDiskWrite(Math.round(delta(curr.diskWrite, prev.diskWrite) / seconds));
+        stats.setDiskRead(counterRate(curr.diskRead, prev.diskRead, seconds));
+        stats.setDiskWrite(counterRate(curr.diskWrite, prev.diskWrite, seconds));
         return stats;
     }
 
+    /** 可选累计计数为 NULL 或负数时，不能参与差分。 */
+    private static boolean knownCounter(Long value) {
+        return value != null && value >= 0;
+    }
+
+    /** 可选计数差：字段未知或计数回退返回 NULL；相等返回真实 0。 */
+    private static Long counterDelta(Long current, Long previous) {
+        return knownCounter(current) && knownCounter(previous) && current >= previous ? current - previous : null;
+    }
+
+    /** 可选计数的每秒速率，保留未知语义。 */
+    private static Long counterRate(Long current, Long previous, double seconds) {
+        Long delta = counterDelta(current, previous);
+        return delta == null ? null : Math.round(delta / seconds);
+    }
+
     /**
-     * 本轮容器 stats 归一化为计数快照（纯转换，无副作用）：失败容器（null 值）跳过；
-     * 单容器字段缺失按 0，分网卡/分设备求和，v1 cache / v2 inactive_file 归一为单一
-     * memCache（取存在者，都不存在=0）。
+     * 原始累计值归一化：不将缺字段替换成 0。网络每个字段必须在所有接口完整；
+     * blkio 明确返回空数组表示真实零 I/O，整个字段缺失表示不可用。
      */
     private static Map<String, ContainerCounters> toContainerCounters(Map<String, ContainerStatsRaw> statsMap) {
         Map<String, ContainerCounters> result = new HashMap<>(statsMap == null ? 16 : statsMap.size() * 2);
-        if (statsMap == null) {
-            return result;
-        }
+        if (statsMap == null) { return result; }
         for (Map.Entry<String, ContainerStatsRaw> entry : statsMap.entrySet()) {
             ContainerStatsRaw stats = entry.getValue();
-            if (stats == null) {
-                continue;
-            }
+            if (stats == null) { continue; }
             ContainerCounters counter = new ContainerCounters();
             counter.monoNanos = System.nanoTime();
             ContainerStatsRaw.CpuSection cpu = stats.getCpuStats();
             if (cpu != null) {
-                if (cpu.getCpuUsage() != null) {
-                    counter.cpuTotalUsage = nvl(cpu.getCpuUsage().getTotalUsage());
-                }
+                if (cpu.getCpuUsage() != null) { counter.cpuTotalUsage = cpu.getCpuUsage().getTotalUsage(); }
                 ContainerStatsRaw.ThrottlingSection throttling = cpu.getThrottlingData();
                 if (throttling != null) {
-                    counter.throttledNanos = nvl(throttling.getThrottledTime());
-                    counter.periods = nvl(throttling.getPeriods());
-                    counter.throttledPeriods = nvl(throttling.getThrottledPeriods());
+                    counter.throttledNanos = throttling.getThrottledTime();
+                    counter.periods = throttling.getPeriods();
+                    counter.throttledPeriods = throttling.getThrottledPeriods();
                 }
             }
             ContainerStatsRaw.MemorySection memory = stats.getMemoryStats();
             if (memory != null) {
-                counter.memUsage = nvl(memory.getUsage());
-                counter.memLimit = nvl(memory.getLimit());
+                counter.memUsage = memory.getUsage();
+                counter.memLimit = memory.getLimit();
                 if (memory.getStats() != null) {
                     Long v1Cache = memory.getStats().get("cache");
-                    Long v2Inactive = memory.getStats().get("inactive_file");
-                    counter.memCache = v1Cache != null ? v1Cache : nvl(v2Inactive);
+                    counter.memCache = v1Cache != null ? v1Cache : memory.getStats().get("inactive_file");
                 }
             }
             ContainerStatsRaw.PidsSection pids = stats.getPidsStats();
             if (pids != null) {
-                counter.pidCount = nvl(pids.getCurrent());
-                counter.pidsLimit = nvl(pids.getLimit());
+                counter.pidCount = pids.getCurrent();
+                counter.pidsLimit = pids.getLimit();
             }
-            Map<String, ContainerStatsRaw.NetworkIfStats> networks = stats.getNetworks();
-            if (networks != null && !networks.isEmpty()) {
-                counter.networksPresent = true;
-            long rx = 0, tx = 0, rxDrop = 0, txDrop = 0, rxErr = 0, txErr = 0;
-            for (ContainerStatsRaw.NetworkIfStats ifStats : networks.values()) {
-                if (ifStats == null) {
-                    continue;
-                }
-                rx += nvl(ifStats.getRxBytes());
-                tx += nvl(ifStats.getTxBytes());
-                rxDrop += nvl(ifStats.getRxDropped());
-                txDrop += nvl(ifStats.getTxDropped());
-                rxErr += nvl(ifStats.getRxErrors());
-                txErr += nvl(ifStats.getTxErrors());
-            }
-                counter.netRx = rx;
-                counter.netTx = tx;
-                counter.rxDropped = rxDrop;
-                counter.txDropped = txDrop;
-                counter.rxErrors = rxErr;
-                counter.txErrors = txErr;
-            }
-            ContainerStatsRaw.BlkioSection blkio = stats.getBlkioStats();
-            if (blkio != null && blkio.getIoServiceBytes() != null) {
-                long read = 0, write = 0;
-                for (ContainerStatsRaw.BlkioEntry ioEntry : blkio.getIoServiceBytes()) {
-                    if (ioEntry == null || ioEntry.getValue() == null) {
-                        continue;
-                    }
-                    if ("Read".equalsIgnoreCase(ioEntry.getOp())) {
-                        read += ioEntry.getValue();
-                    } else if ("Write".equalsIgnoreCase(ioEntry.getOp())) {
-                        write += ioEntry.getValue();
-                    }
-                }
-                counter.diskRead = read;
-                counter.diskWrite = write;
-            }
+            normalizeNetworks(counter, stats.getNetworks());
+            normalizeDisk(counter, stats.getBlkioStats());
             result.put(entry.getKey(), counter);
         }
         return result;
+    }
+
+    /** 所有网络接口的某一指标完整时才求和，避免缺一个接口却低报流量。 */
+    private static void normalizeNetworks(ContainerCounters counter, Map<String, ContainerStatsRaw.NetworkIfStats> networks) {
+        if (networks == null || networks.isEmpty()) { return; }
+        counter.networksPresent = true;
+        counter.netRx = 0L;
+        counter.netTx = 0L;
+        counter.rxDropped = 0L;
+        counter.txDropped = 0L;
+        counter.rxErrors = 0L;
+        counter.txErrors = 0L;
+        for (ContainerStatsRaw.NetworkIfStats value : networks.values()) {
+            counter.netRx = completeSum(counter.netRx, value == null ? null : value.getRxBytes());
+            counter.netTx = completeSum(counter.netTx, value == null ? null : value.getTxBytes());
+            counter.rxDropped = completeSum(counter.rxDropped, value == null ? null : value.getRxDropped());
+            counter.txDropped = completeSum(counter.txDropped, value == null ? null : value.getTxDropped());
+            counter.rxErrors = completeSum(counter.rxErrors, value == null ? null : value.getRxErrors());
+            counter.txErrors = completeSum(counter.txErrors, value == null ? null : value.getTxErrors());
+        }
+    }
+
+    /** 累加要求两侧均有效且不溢出；一项未知使该聚合指标未知。 */
+    private static Long completeSum(Long total, Long value) {
+        return knownCounter(total) && knownCounter(value) && Long.MAX_VALUE - total >= value ? total + value : null;
+    }
+
+    /** blkio 只有明确存在的读写计数可测，缺失/损坏不伪装成零。 */
+    private static void normalizeDisk(ContainerCounters counter, ContainerStatsRaw.BlkioSection blkio) {
+        if (blkio == null || blkio.getIoServiceBytes() == null) { return; }
+        counter.diskRead = 0L;
+        counter.diskWrite = 0L;
+        for (ContainerStatsRaw.BlkioEntry entry : blkio.getIoServiceBytes()) {
+            if (entry == null) {
+                counter.diskRead = null;
+                counter.diskWrite = null;
+            } else if ("Read".equalsIgnoreCase(entry.getOp())) {
+                counter.diskRead = completeSum(counter.diskRead, entry.getValue());
+            } else if ("Write".equalsIgnoreCase(entry.getOp())) {
+                counter.diskWrite = completeSum(counter.diskWrite, entry.getValue());
+            }
+        }
     }
 
 //===== 主机差分 =====
@@ -612,13 +646,6 @@ public class HostStatsCollector {
      */
     private static long delta(long curr, long prev) {
         return Math.max(curr - prev, 0);
-    }
-
-    /**
-     * null 安全取 long。
-     */
-    private static long nvl(Long value) {
-        return value == null ? 0L : value;
     }
 
     /**

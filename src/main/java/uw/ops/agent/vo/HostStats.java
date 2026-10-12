@@ -6,7 +6,7 @@ import java.util.Date;
 import java.util.List;
 
 /**
- * 设备运行统计信息（60 秒窗口两点差分结果）。
+ * 主机运行统计（60 秒窗口两点差分结果 + 窗口末值快照）。
  * 比率类两位小数；NULL=失败/不完整/不适用，0=真实低值。
  */
 public class HostStats {
@@ -59,7 +59,7 @@ public class HostStats {
     private List<NetworkStats> networkStatsList;
 
     /**
-     * 容器清单（inventory 全量容器快照）。
+     * 容器视图列表（inventory 全量快照 + 窗口统计 + 事件三合一；inventory 失败时仅含事件兜底容器）。
      */
     private List<ContainerInfo> containerInfoList;
 

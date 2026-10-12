@@ -1,9 +1,7 @@
 package uw.ops.agent.vo.sub;
 
-
-
 /**
- * 文件系统信息
+ * 文件系统用量统计（窗口结束时快照；已过滤容器运行时挂载）。
  */
 public class FsStats {
 
@@ -13,12 +11,12 @@ public class FsStats {
     private String name;
 
     /**
-     * volume。
+     * 卷标识。
      */
     private String volume;
 
     /**
-     * 文件系统。
+     * 文件系统类型(ext4/xfs...)。
      */
     private String fsType;
 
@@ -28,12 +26,12 @@ public class FsStats {
     private String mount;
 
     /**
-     * 大小
+     * 总容量(字节)。
      */
     private long total;
 
     /**
-     * 可用大小。
+     * 可用容量(字节)。
      */
     private long usable;
 

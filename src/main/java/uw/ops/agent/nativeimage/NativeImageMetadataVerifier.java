@@ -4,18 +4,23 @@ import com.sun.jna.Native;
 import com.sun.jna.Platform;
 import oshi.SystemInfo;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
 import uw.common.response.ResponseData;
 import uw.common.util.HmacUtils;
 import uw.common.util.JsonUtils;
 import uw.httpclient.util.SSLContextUtils;
-import uw.ops.agent.util.ShellCmdUtils;
-import uw.ops.agent.vo.HostStats;
-import uw.ops.agent.vo.OpsTask;
 import uw.ops.agent.helper.vo.ContainerInspectRaw;
 import uw.ops.agent.helper.vo.ContainerStatsRaw;
 import uw.ops.agent.helper.vo.ContainerSummaryRaw;
 import uw.ops.agent.helper.vo.CreateContainerParam;
 import uw.ops.agent.helper.vo.CreateContainerRaw;
+import uw.ops.agent.util.ShellCmdUtils;
+import uw.ops.agent.vo.HostStats;
+import uw.ops.agent.vo.HostInfo;
+import uw.ops.agent.vo.OpsTask;
+import uw.ops.agent.vo.TaskData;
+import uw.ops.agent.vo.ProbeScriptEntry;
+import uw.ops.agent.vo.ProbeSpec;
 import uw.ops.agent.vo.sub.ContainerInfo;
 
 import java.io.IOException;
@@ -31,6 +36,7 @@ import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Native Image 元数据运行时验证器。
@@ -47,6 +53,8 @@ import java.util.Map;
  *   <li>Engine API 响应 vo 绑定（ContainerSummaryRaw/ContainerStatsRaw/ContainerInspectRaw，
  *       含 @JsonProperty snake/Pascal 映射、Map 嵌套绑定）与写操作 vo（CreateContainerParam 出站序列化、
  *       CreateContainerRaw 响应绑定——结构化任务通道）；</li>
+ *   <li>任务统一载荷契约类 TaskData（本地 vo 包，随 AgentReflectionFeature 注册）：
+ *       Shell+Docker 两段完整样例的序列化/反序列化往返（结构化任务通道的载荷绑定）；</li>
  *   <li>HMAC 签名与 TLS 上下文（JDK crypto provider 元数据）；</li>
  *   <li>资源包含（oshi/slf4j 配置与 SPI 文件）；</li>
  *   <li>Linux 原生访问（JNA 库加载、OSHI 硬件/OS 读取）；</li>
@@ -87,7 +95,38 @@ public final class NativeImageMetadataVerifier {
         verifyUdsSocketChannel();
         verifyShellExecution();
         verifyProtocolVoBinding();
+        verifyProbePersistenceBinding();
         System.out.println("Native image metadata verification passed.");
+    }
+
+    /** 验证探测模型的落盘与恢复绑定，真实 Native 运行时同样执行此路径。 */
+    private static void verifyProbePersistenceBinding() {
+        Path temporary = null;
+        try {
+            temporary = Files.createTempFile("ops-probe-metadata-", ".json");
+            ProbeScriptEntry expected = new ProbeScriptEntry("native-probe", 123,
+                    "{\"type\":\"http\",\"url\":\"http://127.0.0.1:8080/health\",\"expect\":[200,204]}");
+            Files.write(temporary, JsonUtils.toBytes(expected));
+            ProbeScriptEntry restored = JsonUtils.parse(Files.readAllBytes(temporary), ProbeScriptEntry.class);
+            require(restored != null && "native-probe".equals(restored.getDockerId())
+                    && restored.getContainerId() == 123, "probe persistence binding");
+            //ProbeSpec DSL 反射绑定（label/taskData 两路径的 JSON 契约）。
+            ProbeSpec spec = JsonUtils.parse(restored.getScript(), ProbeSpec.class);
+            require(spec != null && "http".equals(spec.getType())
+                    && "http://127.0.0.1:8080/health".equals(spec.getUrl())
+                    && spec.getExpect() != null && spec.getExpect().size() == 2
+                    && spec.getExpect().get(1) == 204, "probe spec binding");
+        } catch (IOException e) {
+            throw new IllegalStateException("probe persistence verification failed.", e);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException e) {
+                    throw new IllegalStateException("probe persistence verification cleanup failed.", e);
+                }
+            }
+        }
     }
 
     /**
@@ -104,15 +143,18 @@ public final class NativeImageMetadataVerifier {
     }
 
     /**
-     * 验证下行协议 JSON 绑定：泛型 ResponseData 容器内嵌任务对象反序列化。
+     * 验证下行协议 JSON 绑定：泛型 ResponseData 容器内嵌任务对象反序列化
+     * （含 taskData 统一载荷的 camelCase 契约字段）。
      */
     private static void verifyResponseDataDeserialization() {
         ResponseData<List<OpsTask>> response = JsonUtils.parse("""
-                {"time":1,"state":"SUCCESS","msg":"ok","code":"","data":[{"id":1,"taskScript":"true"}]}
+                {"time":1,"state":"SUCCESS","msg":"ok","code":"","data":[{"id":1,"taskData":{"execType":"SHELL","shell":{"script":"true"}}}]}
                 """, new TypeReference<>() {
         });
         require(response.getData() != null && response.getData().size() == 1, "ResponseData deserialization");
         require(response.getData().getFirst().getId() == 1, "ResponseData task deserialization");
+        require(response.getData().getFirst().getTaskData() != null
+                && "SHELL".equals(response.getData().getFirst().getTaskData().getExecType()), "ResponseData taskData deserialization");
     }
 
     /**
@@ -121,6 +163,11 @@ public final class NativeImageMetadataVerifier {
     private static void verifySecurityServices() {
         String signature = HmacUtils.sign("native-metadata", "verification-secret");
         require(HmacUtils.verify("native-metadata", "verification-secret", signature), "HMAC-SHA256");
+        String nonce = UUID.randomUUID().toString().replace("-", "");
+        require(nonce.matches("[a-f0-9]{32}"), "request nonce entropy initialization");
+        String response = "center-response-v2:host:" + nonce + ":{}:1700000000000";
+        require(HmacUtils.verify(response, "verification-secret", HmacUtils.sign(response, "verification-secret")),
+                "nonce-bound response signature");
         require(SSLContextUtils.getAllTruestContext() != null, "TLS context initialization");
     }
 
@@ -212,16 +259,33 @@ public final class NativeImageMetadataVerifier {
     private static void verifyProtocolVoBinding() {
         //上报协议：statsDate 是 (host_id, create_date) 幂等键的时间源，必须随序列化输出；
         //嵌套结构（info 内 statsList/eventList）是本轮协议的核心形状，一并断言。
+        HostInfo hardware = new HostInfo();
+        hardware.setCpuLogicalCount(8);
+        require(JsonUtils.parse(JsonUtils.toString(hardware), HostInfo.class).getCpuLogicalCount() == 8,
+                "HostInfo CPU capacity binding");
+        ContainerInfo.Stats unknown = JsonUtils.parse(JsonUtils.toString(new ContainerInfo.Stats()), ContainerInfo.Stats.class);
+        require(unknown.getCpuPercent() == null && unknown.getNetworkIn() == null && unknown.getDiskRead() == null,
+                "unknown metrics stay null");
         HostStats hostStats = new HostStats();
         hostStats.setStatsDate(new Date(1700000000000L));
         ContainerInfo sampleInfo = new ContainerInfo();
         sampleInfo.setId("sample-hash");
         sampleInfo.setStatsList(List.of(new ContainerInfo.Stats()));
         sampleInfo.setEventList(List.of(new ContainerInfo.Event()));
+        //就绪探测摘要字段：probeState/probeSeq/probeDate/probeFails/probeStreak/probeReason 随窗上报（camelCase），null 时省略。
+        sampleInfo.setProbeState(1);
+        sampleInfo.setProbeSeq(42L);
+        sampleInfo.setProbeDate(1700000000000L);
+        sampleInfo.setProbeFails(0);
+        sampleInfo.setProbeStreak(90000L);
+        sampleInfo.setProbeReason("tcp-refused");
         hostStats.setContainerInfoList(List.of(sampleInfo));
         String hostStatsJson = JsonUtils.toString(hostStats);
         require(hostStatsJson.contains("\"containerInfoList\"") && hostStatsJson.contains("\"statsList\"")
-                && hostStatsJson.contains("\"eventList\"") && hostStatsJson.contains("\"statsDate\""), "HostStats serialization");
+                && hostStatsJson.contains("\"eventList\"") && hostStatsJson.contains("\"statsDate\"")
+                && hostStatsJson.contains("\"probeState\"") && hostStatsJson.contains("\"probeSeq\"")
+                && hostStatsJson.contains("\"probeDate\"") && hostStatsJson.contains("\"probeFails\"")
+                && hostStatsJson.contains("\"probeStreak\"") && hostStatsJson.contains("\"probeReason\""), "HostStats serialization");
 
         //inventory 输入 vo：PascalCase 字段与嵌套 HostConfig。
         ContainerSummaryRaw[] summaries = JsonUtils.parse("""
@@ -250,9 +314,47 @@ public final class NativeImageMetadataVerifier {
         require(inspectVo.getRestartCount() == 2 && Boolean.TRUE.equals(inspectVo.getState().getOomKilled())
                 && inspectVo.getHostConfig().getNanoCpus() == 2000000000L, "ContainerInspectRaw deserialization");
 
-        //下行任务对象绑定。
-        OpsTask task = JsonUtils.parse("{\"id\":1,\"taskScript\":\"true\"}", OpsTask.class);
-        require(task.getId() == 1 && "true".equals(task.getTaskScript()), "OpsTask deserialization");
+        //下行任务对象绑定（taskData 内嵌契约类，camelCase 键）。
+        OpsTask task = JsonUtils.parse("{\"id\":1,\"dockerId\":\"hash01\",\"actualPorts\":\"APP_PORT=10010\\n\","
+                + "\"taskData\":{\"taskVersion\":2,\"execType\":\"SHELL\",\"shell\":{\"script\":\"true\",\"ports\":{\"APP_PORT\":\"10010\"}}}}", OpsTask.class);
+        require(task.getId() == 1 && "hash01".equals(task.getDockerId())
+                && task.getTaskData() != null && "SHELL".equals(task.getTaskData().getExecType())
+                && "true".equals(task.getTaskData().getShell().getScript()), "OpsTask deserialization");
+
+        //任务统一载荷契约类（本地 vo.TaskData，随 uw.ops.agent.vo 包注册反射）：
+        //Shell+Docker 两段完整样例经 JsonUtils 序列化/反序列化往返（结构化任务通道的载荷绑定）。
+        TaskData sample = new TaskData();
+        sample.setExecType("DOCKER");
+        sample.setSensitiveOutput(true);
+        sample.setSecretKeys(List.of("DB_SECRET"));
+        TaskData.ShellSection shellSection = new TaskData.ShellSection();
+        shellSection.setScript("echo ${APP_PORT}");
+        shellSection.setPorts(Map.of("APP_PORT", "10010"));
+        sample.setShell(shellSection);
+        TaskData.ContainerSection dockerSection = new TaskData.ContainerSection();
+        dockerSection.setAction("start");
+        dockerSection.setImage("registry.example.com/uw-task-center@sha256:abc123");
+        dockerSection.setContainerName("uw-ops-123");
+        dockerSection.setTargetContainerHash("hash01");
+        dockerSection.setEnv(List.of("JAVA_OPTS=-Xmx1g", "TZ=Asia/Shanghai"));
+        dockerSection.setMounts(List.of("/etc/localtime:/etc/localtime:ro"));
+        dockerSection.setNetworkMode("host");
+        dockerSection.setRestartPolicy("on-failure:5");
+        dockerSection.setHostPorts(Map.of("APP_PORT", 10010));
+        dockerSection.setContainerMem(1000L);
+        dockerSection.setNanoCpus(2_000_000_000L);
+        dockerSection.setExtra(JsonUtils.parse("{\"CapAdd\":[\"NET_ADMIN\"],\"Sysctls\":{}}", JsonNode.class));
+        dockerSection.setProbeTaskData("curl -sf -m 2 http://127.0.0.1:10010/ready || exit 1");
+        dockerSection.setProfileCode("dev");
+        sample.setContainer(dockerSection);
+        TaskData roundTrip = JsonUtils.parse(JsonUtils.toString(sample), TaskData.class);
+        require(roundTrip.isSensitiveOutput() && roundTrip.getSecretKeys().equals(List.of("DB_SECRET")) && "DOCKER".equals(roundTrip.getExecType()) && "start".equals(roundTrip.getContainer().getAction())
+                && "registry.example.com/uw-task-center@sha256:abc123".equals(roundTrip.getContainer().getImage())
+                && roundTrip.getContainer().getHostPorts().get("APP_PORT") == 10010
+                && roundTrip.getContainer().getEnv().contains("TZ=Asia/Shanghai")
+                && roundTrip.getShell().getPorts().get("APP_PORT").equals("10010")
+                && "NET_ADMIN".equals(roundTrip.getContainer().getExtra().path("CapAdd").get(0).asString()),
+                "TaskData round-trip deserialization");
 
         //结构化任务写操作 vo：create 请求体出站序列化（PascalCase + null 省略）与 daemon 响应入站绑定。
         CreateContainerParam createParam = new CreateContainerParam();

@@ -1,42 +1,42 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 负载信息。
+ * 主机负载统计（窗口结束时快照：load average/进程/线程/uptime）。
  */
 public class LoadStats {
 
     /**
-     * 启动时间。
+     * 系统已运行时长(秒)。
      */
     private long uptime;
 
     /**
-     * 1分钟负载
+     * 1分钟负载。
      */
     private double load1m;
 
     /**
-     * 5分钟负载
+     * 5分钟负载。
      */
     private double load5m;
 
     /**
-     * 15分钟负载
+     * 15分钟负载。
      */
     private double load15m;
 
     /**
-     * 系统功率。
+     * 电源功率合计(µW，无电源为 0)。
      */
     private long power;
 
     /**
-     * 当前进程数
+     * 当前进程数。
      */
     private int processCount;
 
     /**
-     * 当前线程数
+     * 当前线程数。
      */
     private int threadCount;
 

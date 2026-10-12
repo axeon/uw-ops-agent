@@ -1,52 +1,52 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 内存信息。
+ * 主机内存统计（窗口结束时快照：物理内存/交换/虚拟内存的容量与用量）。
  */
 public class MemStats {
 
     /**
-     * 总内存数
+     * 总内存数(字节)。
      */
     private long total;
 
     /**
-     * 可用内存数。
+     * 可用内存数(字节)。
      */
     private long usable;
 
     /**
-     * 页大小。
+     * 内存页大小(字节)。
      */
     private long pageSize;
 
     /**
-     * swap大小
+     * swap 总大小(字节)。
      */
     private long swapTotal;
 
     /**
-     * 已用的swap
+     * swap 已用(字节)。
      */
     private long swapUsed;
 
     /**
-     * 虚拟内存大小
+     * 虚拟内存大小(字节)。
      */
     private long virtualMax;
 
     /**
-     * 虚拟内存已用。
+     * 虚拟内存已用(字节)。
      */
     private long virtualInUse;
 
     /**
-     * swap page in
+     * swap 换入页数。
      */
     private long swapPagesIn;
 
     /**
-     * swap page out
+     * swap 换出页数。
      */
     private long swapPagesOut;
 

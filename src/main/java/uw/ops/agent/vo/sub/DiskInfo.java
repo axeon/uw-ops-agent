@@ -22,7 +22,7 @@ public class DiskInfo {
     private String serial;
 
     /**
-     * 大小。
+     * 容量(字节)。
      */
     private long size;
 

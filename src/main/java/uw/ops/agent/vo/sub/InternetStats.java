@@ -1,22 +1,23 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 网络相关信息。
+ * TCP 连接状态统计（窗口结束时快照：直读 /proc/net/tcp(/tcp6) 按状态位计数，
+ * LISTEN 不计，对齐 ss -t 口径）。
  */
 public class InternetStats {
 
     /**
-     * 已连接。
+     * ESTABLISHED 连接数。
      */
     private int established;
 
     /**
-     * 对方关闭连接中或异常中断中。
+     * CLOSE_WAIT 连接数（对方已关闭，本地应用未关）。
      */
     private int closeWait;
 
     /**
-     * 我方关闭连接中。
+     * TIME_WAIT 连接数（我方关闭后的等待期）。
      */
     private int timeWait;
 

@@ -27,7 +27,19 @@ class ShellCmdUtilsTest {
                 new String[]{"/bin/sh", "-c", "echo failed >&2; exit 7"}, null, true, 5_000));
 
         assertTrue(error.getMessage().contains("code 7"));
-        assertTrue(error.getMessage().contains("failed"));
+        assertFalse(error.getMessage().contains("echo failed"));
+        assertFalse(error.getMessage().contains("Output:"));
+    }
+
+    @Test
+    void commandFailureNeverIncludesScriptOrOutputSecrets() {
+        String secret = "synthetic-script-secret";
+        RuntimeException exit = assertThrows(RuntimeException.class, () -> ShellCmdUtils.runNative(
+                new String[]{"/bin/sh", "-c", "echo " + secret + "; exit 9"}, null, true, 5_000));
+        assertFalse(exit.toString().contains(secret));
+        RuntimeException timeout = assertThrows(RuntimeException.class, () -> ShellCmdUtils.runNative(
+                new String[]{"/bin/sh", "-c", "echo " + secret + "; sleep 2"}, null, true, 30));
+        assertFalse(timeout.toString().contains(secret));
     }
 
     @Test
@@ -44,7 +56,9 @@ class ShellCmdUtilsTest {
     }
 
     @Test
-    void shouldDrainStderrWithoutDeadlocking() {
+    void shouldDiscardLargeStderrWithoutDeadlocking() {
+        //stderr 约 200KB（远超管道容量 64KB）：直连内核丢弃目标，不建管道、无写端阻塞，
+        //也不能渗入 stdout 结果（回归防线：删掉 DISCARD 重定向即写端阻塞假超时）。
         List<String> output = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", """
                 i=0
                 while [ $i -lt 5000 ]; do
@@ -67,17 +81,25 @@ class ShellCmdUtilsTest {
     }
 
     @Test
-    void shouldReuseOutputReaderThreadsAcrossCommands() {
+    void shouldKeepOutputReadersOffPlatformThreads() {
+        //读取器为虚拟线程（Thread.getAllStackTraces 只含平台线程）：连跑多条命令后
+        //不得残留任何平台读取线程——排水不占调度线程资源，也无线程池复用记账。
         String[] command = new String[]{"/bin/sh", "-c", "sleep 0.1; echo completed"};
-
-        ShellCmdUtils.runNative(command, null, false, 5_000);
-        Set<Long> initialThreadIds = outputReaderThreadIds();
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 5; i++) {
             ShellCmdUtils.runNative(command, null, false, 5_000);
         }
 
-        assertFalse(initialThreadIds.isEmpty());
-        assertEquals(initialThreadIds, outputReaderThreadIds());
+        assertTrue(outputReaderThreadIds().isEmpty(), "output readers should be virtual threads");
+    }
+
+    @Test
+    void shouldTruncateRunawayOutputAtMemoryGuard() {
+        //约 2M 字符（>1M 失控防线）的输出：以标记行收尾截断，不整量读入内存。
+        List<String> output = ShellCmdUtils.runNative(
+                new String[]{"/bin/sh", "-c", "yes 'padding-0123456789' | head -n 120000"}, null, true, 5_000);
+
+        assertTrue(output.size() < 120_000);
+        assertTrue(output.get(output.size() - 1).contains("[output truncated at"), output.get(output.size() - 1));
     }
 
     private static Set<Long> outputReaderThreadIds() {

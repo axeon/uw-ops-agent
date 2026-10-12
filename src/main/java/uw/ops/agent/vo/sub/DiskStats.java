@@ -1,7 +1,7 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 磁盘窗口统计（每分钟 HostStats 上报，差分值 + 即时队列长度）。
+ * 主机磁盘窗口统计（60 秒两点差分值 + 即时队列长度）。
  * 静态属性（model/serial/size）见 {@link DiskInfo}，不随本类传输。
  */
 public class DiskStats {
@@ -12,32 +12,32 @@ public class DiskStats {
     private String name;
 
     /**
-     * 读取次数。
+     * 窗口读取次数。
      */
     private long reads;
 
     /**
-     * 读取字节数。
+     * 窗口读取字节数。
      */
     private long readBytes;
 
     /**
-     * 写入次数。
+     * 窗口写入次数。
      */
     private long writes;
 
     /**
-     * 写入字节数。
+     * 窗口写入字节数。
      */
     private long writeBytes;
 
     /**
-     * 传输时间
+     * 窗口传输时间(ms)。
      */
     private long transferTime;
 
     /**
-     * 队列长度
+     * 即时队列长度（非差分）。
      */
     private long queueLength;
 

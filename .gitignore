@@ -1,28 +1,61 @@
+### Maven ###
 target/
-.mvn
-mvnw
-mvnw.cmd
+!**/src/main/**/target/
+!**/src/test/**/target/
+.flattened-pom.xml
+pom.xml.*
+dependency-reduced-pom.xml
+release.properties
+buildNumber.properties
+.mvn/timing.properties
+!.mvn/wrapper/maven-wrapper.jar
 
-### STS ###
+### Java ###
+*.class
+*.ctxt
+.mtj.tmp/
+*.log
+logs/
+hs_err_pid*
+replay_pid*
+
+### IntelliJ IDEA ###
+.idea/
+*.iml
+*.iws
+*.ipr
+
+### Eclipse / STS ###
 .apt_generated
+.apt_generated_tests/
 .classpath
 .factorypath
 .project
 .settings
 .springBeans
-
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
+.sts4-cache
 
 ### NetBeans ###
-nbproject/private/
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
 build/
-nbbuild/
-dist/
-nbdist/
-.nb-gradle/
-node_modules/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Claude Code 本地个人配置（settings.json 可共享，不入库）###
+.claude/settings.local.json
+
+### OS ###
 .DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### GraalVM 本机构建产物（可重建，勿入库）###
+/uw-ops-agent-native

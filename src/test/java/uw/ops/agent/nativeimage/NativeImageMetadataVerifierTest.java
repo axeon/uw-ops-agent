@@ -3,7 +3,6 @@ package uw.ops.agent.nativeimage;
 import org.junit.jupiter.api.Test;
 import uw.common.util.JsonUtils;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.List;
@@ -21,6 +20,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class NativeImageMetadataVerifierTest {
 
     @Test
+    void probePersistenceModelIsIncludedInAutomaticNativeRegistration() throws Exception {
+        var scan = AgentReflectionFeature.class.getDeclaredMethod("findModelClassNames", Iterable.class);
+        scan.setAccessible(true);
+        var root = java.nio.file.Path.of(uw.ops.agent.vo.ProbeScriptEntry.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Set<?> classes = (Set<?>) scan.invoke(null, List.of(root));
+        assertTrue(classes.contains("uw.ops.agent.vo.ProbeScriptEntry"));
+    }
+
+    @Test
     void shouldVerifyJsonMetadataPaths() {
         assertDoesNotThrow(NativeImageMetadataVerifier::verify);
     }
@@ -34,13 +42,22 @@ class NativeImageMetadataVerifierTest {
     }
 
     @Test
-    void shouldPackageOnlyUnifiedReachabilityMetadata() throws IOException {
+    void shouldPackageOnlyUnifiedReachabilityMetadata() throws Exception {
         ClassLoader classLoader = NativeImageMetadataVerifierTest.class.getClassLoader();
         URL metadata = classLoader.getResource("META-INF/native-image/com.umtone/uw-ops-agent/reachability-metadata.json");
         assertNotNull(metadata);
         try (InputStream inputStream = metadata.openStream()) {
             Map<?, ?> metadataConfig = JsonUtils.parse(inputStream, Map.class);
-            assertEquals(Set.of("comment", "reflection", "resources"), metadataConfig.keySet());
+            assertEquals(Set.of("comment", "proxy", "reflection", "resources"), metadataConfig.keySet());
+            //proxy 段仅限 JNA 库接口（macOS 本机二进制经 Native.load 走动态代理），
+            //条目必须是可加载的真实接口——挡住非接口类（如 CallbackReference）混入。
+            for (Object entry : (List<?>) metadataConfig.get("proxy")) {
+                for (String interfaceName : (List<String>) ((Map<?, ?>) entry).get("interfaces")) {
+                    assertTrue(interfaceName.startsWith("com.sun.jna."), "proxy interface " + interfaceName);
+                    assertTrue(Class.forName(interfaceName, false, classLoader).isInterface(),
+                            "proxy interface " + interfaceName);
+                }
+            }
             Set<String> resourceGlobs = ((List<?>) metadataConfig.get("resources")).stream()
                     .map(Map.class::cast)
                     .map(resource -> (String) resource.get("glob"))

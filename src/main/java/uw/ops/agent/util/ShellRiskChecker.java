@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 /**
- * 检测过滤危险的shell指令（验签是主防线，本检查是误操作兜底——覆盖典型灾难性命令，
+ * 检测过滤危险的shell指令（CMD 任务唯一本地防线——覆盖典型灾难性命令，
  * 不承诺全量防护；模式统一 CASE_INSENSITIVE，勿在 checkRisk 做大小写预处理，
  * 否则模式中的大写字面量（如 -R）永不匹配——历史 bug）。
  */

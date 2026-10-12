@@ -9,12 +9,19 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 网络端口工具。用于在指定端口被占用时自动寻找下一个可用端口，支持短时缓存避免重复探测。
+ * 本机端口可用性探测工具（结构化 start 前的端口校验数据源）。
+ * <p>
+ * Center 的端口分配只汇总 ops_container_info 台账（受管容器），对非受管进程、手工容器、
+ * 内核临时端口（ip_local_port_range）的本机占用不可见——台账空闲 ≠ 端口真的空闲。
+ * 本工具用 bind 探测拿到内核视角的真实可用性：指定端口被占时自动递增寻找下一个可用端口。
+ * <p>
+ * 探测结果短时缓存（bind 失败的端口与已分配出的端口在 TTL 内不重复探测、不重复分配），
+ * 同时承担同进程多端口名分配的互斥（bind 成功的端口 TTL 内不会被再次给出）。
  */
 public class NetworkUtils {
 
     /**
-     * 端口检测的ttl。
+     * 端口占用缓存的存活期(毫秒)：期内复用其他探测的结果，避免重复 bind 探测。
      */
     private static final long CHECK_TTL = 300_000L;
 
@@ -47,12 +54,15 @@ public class NetworkUtils {
     }
 
     /**
-     * 根据输入端口号，递增查询可使用端口
+     * 从输入端口起逐个递增 bind 探测，返回首个可绑定的端口（含输入值本身：空闲即原样返回）。
+     * synchronized：bind 探测非原子（探测即关闭），并发任务串行探测 + 缓存登记互斥，
+     * 避免两个并发 start 各自探测到同一"空闲"端口造成双分配。
      *
-     * @param port 端口号
+     * @param port 起始端口号
      * @return 可用端口
+     * @throws IOException 递增到 65535 仍无可用端口
      */
-    public static int getUsablePort(int port) throws IOException {
+    public static synchronized int getUsablePort(int port) throws IOException {
         while (port <= 65535) {
             //先检测端口缓存。
             if (checkPortCache(port)) {

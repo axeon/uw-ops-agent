@@ -43,6 +43,21 @@ public final class Constants {
     private static final String DEFAULT_AGENT_SECRET_PATH = "/etc/uw-ops-agent/agent.secret";
 
     /**
+     * 任务执行并发度 System property 键。
+     */
+    private static final String PROP_MAX_CONCURRENT_TASKS = "uw.ops.agent.max-concurrent-tasks";
+
+    /**
+     * 任务执行并发度环境变量名。
+     */
+    private static final String ENV_OPS_AGENT_MAX_CONCURRENT_TASKS = "OPS_AGENT_MAX_CONCURRENT_TASKS";
+
+    /**
+     * 任务执行并发度默认值。
+     */
+    private static final int DEFAULT_MAX_CONCURRENT_TASKS = 4;
+
+    /**
      * 产品标识（名称:版本，logger 名/日志前缀）：由 pom.xml 的 project.name/project.version
      * 经 Maven resource filtering 注入 project-info.properties，类加载时读取一次
      * （改名称或版本只动 pom）。native 镜像经 -H:IncludeResources 打包该资源，
@@ -124,6 +139,53 @@ public final class Constants {
     public static String getOpsAgentSecretFile() {
         String path = System.getenv(ENV_OPS_AGENT_SECRET_FILE);
         return StringUtils.isBlank(path) ? DEFAULT_AGENT_SECRET_PATH : path.trim();
+    }
+
+    /**
+     * 就绪探测条目落盘目录环境变量（便于测试覆盖）。
+     */
+    private static final String ENV_OPS_AGENT_PROBE_DIR = "OPS_AGENT_PROBE_DIR";
+
+    /**
+     * 就绪探测条目落盘默认目录（与 agent.secret 同级）。
+     */
+    private static final String DEFAULT_AGENT_PROBE_DIR = "/etc/uw-ops-agent/probe";
+
+    /**
+     * 获取就绪探测条目落盘目录：优先环境变量 OPS_AGENT_PROBE_DIR（便于测试），未设置用默认目录。
+     * 探测脚本只随 START 任务下发，落盘使 Agent 自升级/重启后能重建探测集合。
+     *
+     * @return 探测条目落盘目录
+     */
+    public static String getOpsAgentProbeDir() {
+        String dir = System.getenv(ENV_OPS_AGENT_PROBE_DIR);
+        return StringUtils.isBlank(dir) ? DEFAULT_AGENT_PROBE_DIR : dir.trim();
+    }
+
+    /**
+     * 获取任务执行并发度（ops 任务执行池线程数）：优先 System property
+     * {@value #PROP_MAX_CONCURRENT_TASKS}，其次环境变量 OPS_AGENT_MAX_CONCURRENT_TASKS，
+     * 均未设置或值非法(&lt;=1/非数字)时用默认值 {@value #DEFAULT_MAX_CONCURRENT_TASKS}。
+     * <p>
+     * center 投放模式为串行（GLOBAL_SERIAL/PER_HOST_SERIAL）时每主机同时最多一条到期任务，
+     * 本配置自然退化为"同一时刻只有一条在执行"，无副作用；PARALLEL 模式下并发吞吐由此值决定。
+     *
+     * @return 任务执行并发度（&gt;=1）
+     */
+    public static int getMaxConcurrentTasks() {
+        String value = System.getProperty(PROP_MAX_CONCURRENT_TASKS);
+        if (StringUtils.isBlank(value)) {
+            value = System.getenv(ENV_OPS_AGENT_MAX_CONCURRENT_TASKS);
+        }
+        if (StringUtils.isBlank(value)) {
+            return DEFAULT_MAX_CONCURRENT_TASKS;
+        }
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            return parsed > 0 ? parsed : DEFAULT_MAX_CONCURRENT_TASKS;
+        } catch (NumberFormatException e) {
+            return DEFAULT_MAX_CONCURRENT_TASKS;
+        }
     }
 
 }

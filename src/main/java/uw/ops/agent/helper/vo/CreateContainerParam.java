@@ -159,7 +159,7 @@ public class CreateContainerParam {
     private Integer stopTimeout;
 
     /**
-     * Docker 原生健康检查（--health-*；ops 就绪探测在 Agent 侧 statusScript，本字段供需要时使用）。
+     * Docker 原生健康检查（--health-*；ops 就绪探测在 Agent 侧 probeConfig，本字段供需要时使用）。
      */
     @JsonProperty("Healthcheck")
     private HealthSection healthcheck;
@@ -2124,7 +2124,7 @@ public class CreateContainerParam {
     }
 
     /**
-     * Docker 原生健康检查段（--health-*；ops 就绪探测在 Agent 侧 statusScript，本段供需要时使用）。
+     * Docker 原生健康检查段（--health-*；ops 就绪探测在 Agent 侧 probeConfig，本段供需要时使用）。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public static class HealthSection {

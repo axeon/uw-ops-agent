@@ -18,12 +18,12 @@ public class ContainerInfo {
     public static final String STATE_DESTROYED = "destroyed";
 
     /**
-     * 容器id。
+     * 容器完整 Id（containerHash 台账身份键）。
      */
     private String id;
 
     /**
-     * 容器名。
+     * 容器名（剥离前导斜杠后的主名）。
      */
     private String name;
 
@@ -33,27 +33,27 @@ public class ContainerInfo {
     private String image;
 
     /**
-     * 创建时间。2023-03-27 14:37:43 +0800 CST
+     * 创建时间（unix 秒转 Date；异常值置 null 由消费方兜底）。
      */
     private Date createDate;
 
     /**
-     * 执行的命令。
+     * 执行的命令（受管容器与标记敏感的容器不回传）。
      */
     private String command;
 
     /**
-     * 网络模式。
+     * 网络模式（bridge/host/none...）。
      */
     private String network;
 
     /**
-     * 运行状态。running
+     * 运行状态（daemon 原生值：running/created/exited，兜底容器为 destroyed）。
      */
     private String state;
 
     /**
-     * 启动时间。Up 5 weeks
+     * 人类可读状态（如 Up 5 weeks）。
      */
     private String status;
 
@@ -69,6 +69,45 @@ public class ContainerInfo {
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private List<Event> eventList;
+
+    /**
+     * 探测摘要（ReadinessProber 聚合，随主轮上报；null=本容器不在探测集合——
+     * 无 label 配置且无 taskData 落盘条目，Center 不动台账就绪字段）。
+     * 协议值：0=UNKNOWN(未探测)、1=SUCCESS(最近探测成功)、2=FAILED(最近探测失败)。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer probeState;
+
+    /**
+     * 探测序号（每容器单调递增；Center 据此做乱序/重放屏障，时钟漂移免疫）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long probeSeq;
+
+    /**
+     * 最近一次探测时间（毫秒时间戳；展示与新鲜度判定用，不作为新旧判据）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long probeDate;
+
+    /**
+     * 连续失败次数（agent 本地聚合的无判断事实；Center 据此分级标记 NOT_READY）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Integer probeFails;
+
+    /**
+     * 连续成功毫秒数（agent 本地聚合；Center 发布门禁直接与 minReadySeconds 比较，
+     * 精度=探测粒度而非上报粒度）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private Long probeStreak;
+
+    /**
+     * 最近失败原因短码（tcp-refused/tcp-timeout/http-status-503/exec-exit-3 等，≤32字符；成功后保留上一失败原因供排障）。
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private String probeReason;
 
     public String getId() {
         return id;
@@ -151,13 +190,61 @@ public class ContainerInfo {
         this.eventList = eventList;
     }
 
+    public Integer getProbeState() {
+        return probeState;
+    }
+
+    public void setProbeState(Integer probeState) {
+        this.probeState = probeState;
+    }
+
+    public Long getProbeSeq() {
+        return probeSeq;
+    }
+
+    public void setProbeSeq(Long probeSeq) {
+        this.probeSeq = probeSeq;
+    }
+
+    public Long getProbeDate() {
+        return probeDate;
+    }
+
+    public void setProbeDate(Long probeDate) {
+        this.probeDate = probeDate;
+    }
+
+    public Integer getProbeFails() {
+        return probeFails;
+    }
+
+    public void setProbeFails(Integer probeFails) {
+        this.probeFails = probeFails;
+    }
+
+    public Long getProbeStreak() {
+        return probeStreak;
+    }
+
+    public void setProbeStreak(Long probeStreak) {
+        this.probeStreak = probeStreak;
+    }
+
+    public String getProbeReason() {
+        return probeReason;
+    }
+
+    public void setProbeReason(String probeReason) {
+        this.probeReason = probeReason;
+    }
+
     /**
      * 容器窗口统计（60 秒两点差分结果，hash 由外层 ContainerInfo 承载）。
      * <p>
-     * 字段使用基本类型：差分失效（无基准/gap 越界）输出 0，未采集由行级存在性表达（statsList=null）。
+     * 字段级 NULL 表示未采集、差分失效或不适用；0 仅表示有效采样测得零值。
      * <ul>
      *   <li>cpuPercent：单核口径百分比（可超 100%，×10 = milliCores），窗口平均；</li>
-     *   <li>networkIn/networkOut/diskRead/diskWrite：窗口平均速率（字节/秒），host 网络模式容器网络项为 0；</li>
+     *   <li>networkIn/networkOut/diskRead/diskWrite：窗口平均速率（字节/秒），host 网络模式容器网络项为 NULL；</li>
      *   <li>memPercent：working set 占配额百分比（v1 扣 cache / v2 扣 inactive_file）。</li>
      * </ul>
      */
@@ -166,209 +253,209 @@ public class ContainerInfo {
         /**
          * cpu占用率：单核口径百分比，可超100，两位小数。
          */
-        private double cpuPercent;
+        private Double cpuPercent;
 
         /**
          * cpu被配额限流时长占比(百分比,两位小数,0-100)。落库 ops_container_stats.cpu_throttle。
          * NULL=未设配额/计数回退/不适用；0=设了配额且没被掐。
          */
-        private double cpuThrottle;
+        private Double cpuThrottle;
 
         /**
          * 内存使用率(working set 占配额百分比,两位小数)。
          */
-        private double memPercent;
+        private Double memPercent;
 
         /**
          * 内存使用(working set字节)，不落库（ops_container_stats 无对应列），随热信号缓存对象保留。
          */
-        private long memUsage;
+        private Long memUsage;
 
         /**
          * 内存限制(字节)。
          */
-        private long memTotal;
+        private Long memTotal;
 
         /**
          * 磁盘写速率(字节/秒)。
          */
-        private long diskWrite;
+        private Long diskWrite;
 
         /**
          * 磁盘读速率(字节/秒)。
          */
-        private long diskRead;
+        private Long diskRead;
 
         /**
          * 网络入站速率(字节/秒)。host网络模式容器无networks数据，置NULL不是0。
          */
-        private long networkIn;
+        private Long networkIn;
 
         /**
          * 网络出站速率(字节/秒)。host网络模式为NULL。
          */
-        private long networkOut;
+        private Long networkOut;
 
         /**
          * 进程/线程数(窗口末值)。
          */
-        private int pidCount;
+        private Integer pidCount;
 
         /**
          * throttle频率(throttled_periods/periods窗口比,百分比)——尖峰画像，不落库。
          */
-        private double cpuThrottleFreq;
+        private Double cpuThrottleFreq;
 
         /**
          * 窗口丢包增量(rx_dropped)，不落库，Center写缓存供告警消费。
          */
-        private long rxDropped;
+        private Long rxDropped;
 
         /**
          * 窗口丢包增量(tx_dropped)，不落库。
          */
-        private long txDropped;
+        private Long txDropped;
 
         /**
          * 窗口错包增量(rx_errors)，不落库。
          */
-        private long rxErrors;
+        private Long rxErrors;
 
         /**
          * 窗口错包增量(tx_errors)，不落库。
          */
-        private long txErrors;
+        private Long txErrors;
 
         /**
          * pids cgroup限额(0=未设)，不落库，逼近限额告警用。
          */
-        private long pidsLimit;
+        private Long pidsLimit;
 
-        public double getCpuPercent() {
+        public Double getCpuPercent() {
             return cpuPercent;
         }
 
-        public void setCpuPercent(double cpuPercent) {
+        public void setCpuPercent(Double cpuPercent) {
             this.cpuPercent = cpuPercent;
         }
 
-        public double getCpuThrottle() {
+        public Double getCpuThrottle() {
             return cpuThrottle;
         }
 
-        public void setCpuThrottle(double cpuThrottle) {
+        public void setCpuThrottle(Double cpuThrottle) {
             this.cpuThrottle = cpuThrottle;
         }
 
-        public double getMemPercent() {
+        public Double getMemPercent() {
             return memPercent;
         }
 
-        public void setMemPercent(double memPercent) {
+        public void setMemPercent(Double memPercent) {
             this.memPercent = memPercent;
         }
 
-        public long getMemUsage() {
+        public Long getMemUsage() {
             return memUsage;
         }
 
-        public void setMemUsage(long memUsage) {
+        public void setMemUsage(Long memUsage) {
             this.memUsage = memUsage;
         }
 
-        public long getMemTotal() {
+        public Long getMemTotal() {
             return memTotal;
         }
 
-        public void setMemTotal(long memTotal) {
+        public void setMemTotal(Long memTotal) {
             this.memTotal = memTotal;
         }
 
-        public long getDiskWrite() {
+        public Long getDiskWrite() {
             return diskWrite;
         }
 
-        public void setDiskWrite(long diskWrite) {
+        public void setDiskWrite(Long diskWrite) {
             this.diskWrite = diskWrite;
         }
 
-        public long getDiskRead() {
+        public Long getDiskRead() {
             return diskRead;
         }
 
-        public void setDiskRead(long diskRead) {
+        public void setDiskRead(Long diskRead) {
             this.diskRead = diskRead;
         }
 
-        public long getNetworkIn() {
+        public Long getNetworkIn() {
             return networkIn;
         }
 
-        public void setNetworkIn(long networkIn) {
+        public void setNetworkIn(Long networkIn) {
             this.networkIn = networkIn;
         }
 
-        public long getNetworkOut() {
+        public Long getNetworkOut() {
             return networkOut;
         }
 
-        public void setNetworkOut(long networkOut) {
+        public void setNetworkOut(Long networkOut) {
             this.networkOut = networkOut;
         }
 
-        public int getPidCount() {
+        public Integer getPidCount() {
             return pidCount;
         }
 
-        public void setPidCount(int pidCount) {
+        public void setPidCount(Integer pidCount) {
             this.pidCount = pidCount;
         }
 
-        public double getCpuThrottleFreq() {
+        public Double getCpuThrottleFreq() {
             return cpuThrottleFreq;
         }
 
-        public void setCpuThrottleFreq(double cpuThrottleFreq) {
+        public void setCpuThrottleFreq(Double cpuThrottleFreq) {
             this.cpuThrottleFreq = cpuThrottleFreq;
         }
 
-        public long getRxDropped() {
+        public Long getRxDropped() {
             return rxDropped;
         }
 
-        public void setRxDropped(long rxDropped) {
+        public void setRxDropped(Long rxDropped) {
             this.rxDropped = rxDropped;
         }
 
-        public long getTxDropped() {
+        public Long getTxDropped() {
             return txDropped;
         }
 
-        public void setTxDropped(long txDropped) {
+        public void setTxDropped(Long txDropped) {
             this.txDropped = txDropped;
         }
 
-        public long getRxErrors() {
+        public Long getRxErrors() {
             return rxErrors;
         }
 
-        public void setRxErrors(long rxErrors) {
+        public void setRxErrors(Long rxErrors) {
             this.rxErrors = rxErrors;
         }
 
-        public long getTxErrors() {
+        public Long getTxErrors() {
             return txErrors;
         }
 
-        public void setTxErrors(long txErrors) {
+        public void setTxErrors(Long txErrors) {
             this.txErrors = txErrors;
         }
 
-        public long getPidsLimit() {
+        public Long getPidsLimit() {
             return pidsLimit;
         }
 
-        public void setPidsLimit(long pidsLimit) {
+        public void setPidsLimit(Long pidsLimit) {
             this.pidsLimit = pidsLimit;
         }
     }

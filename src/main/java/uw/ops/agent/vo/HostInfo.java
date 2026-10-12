@@ -9,12 +9,13 @@ import uw.ops.agent.constant.Constants;
 public class HostInfo {
 
     /**
-     * 唯一id。通过对机器序列号和mac地址做sha1获取。
+     * 唯一id：machineModel$serialNumber$首选网卡MAC 的 SHA-256（见 SystemInfoHelper.getHostHash，
+     * 进程内计算一次后锁定）。
      */
     private String hostHash;
 
     /**
-     * 主机名
+     * 主机名。
      */
     private String hostName;
 
@@ -39,32 +40,35 @@ public class HostInfo {
     private String agentInfo = Constants.getAgentInfo();
 
     /**
-     * osInfo。
+     * 操作系统信息（OSHI 摘要串）。
      */
     private String osInfo;
 
     /**
-     * cpu相关信息。
+     * CPU 型号与核数摘要（如 "Xeon ... 1CPU8C16T"）。
      */
     private String cpuInfo;
 
+    /** OSHI采集的逻辑核数；null表示不可用，不能作为无限CPU容量。 */
+    private Integer cpuLogicalCount;
+
     /**
-     * 内存信息。
+     * 内存容量摘要（如 "16G"）。
      */
     private String memInfo;
 
     /**
-     * 磁盘信息。
+     * 磁盘静态信息：DiskInfo 列表的 JSON 序列化串。
      */
     private String diskInfo;
 
     /**
-     * 文件系统信息。
+     * 文件系统用量：FsStats 列表的 JSON 序列化串。
      */
     private String fsInfo;
 
     /**
-     * ip信息。
+     * 网卡静态信息：NetworkInfo 列表的 JSON 序列化串。
      */
     private String networkInfo;
 
@@ -130,6 +134,14 @@ public class HostInfo {
 
     public void setCpuInfo(String cpuInfo) {
         this.cpuInfo = cpuInfo;
+    }
+
+    public Integer getCpuLogicalCount() {
+        return cpuLogicalCount;
+    }
+
+    public void setCpuLogicalCount(Integer cpuLogicalCount) {
+        this.cpuLogicalCount = cpuLogicalCount;
     }
 
     public String getMemInfo() {

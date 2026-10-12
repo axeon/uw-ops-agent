@@ -1,57 +1,58 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * cpu信息。
+ * 主机 CPU 窗口统计（60 秒两点差分：各态占比为窗口均值，cs/int 为窗口速率）。
+ * 窗口无效或 tick 回退时整组 NULL（见 HostStatsCollector.diffHostCpu）。
  */
 public class CpuStats {
 
     /**
-     * 上下文切换次数。
+     * 窗口内上下文切换次数（差分 ÷ 窗口秒数）。
      */
     private long contextSwitches;
 
     /**
-     * 中断次数。
+     * 窗口内中断次数（差分 ÷ 窗口秒数）。
      */
     private long interrupts;
 
     /**
-     * 用户使用率。
+     * 用户态使用率(%)。
      */
     private double user;
 
     /**
-     * 优先使用率。
+     * 低优先级进程(nice)使用率(%)。
      */
     private double nice;
 
     /**
-     * sys使用率
+     * 内核态(sys)使用率(%)。
      */
     private double sys;
 
     /**
-     * idle使用率。
+     * 空闲(idle)使用率(%)。
      */
     private double idle;
 
     /**
-     * ioWait使用率
+     * IO 等待(iowait)使用率(%)。
      */
     private double ioWait;
 
     /**
-     * 硬中断使用率。
+     * 硬中断占用率(%)。
      */
     private double hardIrq;
 
     /**
-     * 软中断使用率。
+     * 软中断占用率(%)。
      */
     private double softIrq;
 
     /**
-     * 强制等待使用率。
+     * 虚拟化被宿主偷占(steal)使用率(%)。
      */
     private double steal;
 

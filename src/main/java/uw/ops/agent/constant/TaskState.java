@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 
 /**
- * 任务状态。
+ * 任务状态（agent 侧只产出 FAILED/STARTING/SUCCEED；INIT 由 center 侧使用）。
  */
 @JsonFormat(shape = JsonFormat.Shape.OBJECT)
 public enum TaskState {
@@ -19,12 +19,12 @@ public enum TaskState {
 
 
     /**
-     * 参数值
+     * 状态码。
      */
     private final int value;
 
     /**
-     * 参数信息。
+     * 中文名（展示用）。
      */
     private final String label;
 

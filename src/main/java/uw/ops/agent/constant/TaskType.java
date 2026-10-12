@@ -1,11 +1,8 @@
 package uw.ops.agent.constant;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-
 /**
- * 任务类型
+ * 任务类型（执行器分发不依赖本枚举，以 taskData.execType 为唯一依据）。
  */
-@JsonFormat(shape = JsonFormat.Shape.OBJECT)
 public enum TaskType {
 
     CMD(0, "指令任务"),
@@ -15,12 +12,12 @@ public enum TaskType {
     STOP(2, "关闭任务");
 
     /**
-     * 参数值
+     * 类型码。
      */
     private final int value;
 
     /**
-     * 参数信息。
+     * 中文名（展示用）。
      */
     private final String label;
 

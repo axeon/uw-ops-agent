@@ -1,6 +1,9 @@
 package uw.ops.agent.helper;
 
 import org.junit.jupiter.api.Test;
+import oshi.SystemInfo;
+import uw.common.util.JsonUtils;
+import uw.ops.agent.vo.HostInfo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -9,6 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * SystemInfoHelper 全流程测试（只走 public 入口，无注入缝）。
  */
 class SystemInfoHelperTest {
+
+    @Test
+    void hardwareCapacitySurvivesHostInfoWireFormat() {
+        HostInfo host = SystemInfoHelper.buildHostInfo();
+        var json = JsonUtils.parse(JsonUtils.toString(host), java.util.Map.class);
+        assertEquals(new SystemInfo().getHardware().getProcessor().getLogicalProcessorCount(),
+                json.get("cpuLogicalCount"));
+    }
 
     @Test
     void hostHashStableAcrossRebuilds() {

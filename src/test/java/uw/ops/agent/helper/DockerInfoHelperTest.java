@@ -3,25 +3,18 @@ package uw.ops.agent.helper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import uw.common.util.JsonUtils;
 import uw.ops.agent.helper.DockerInfoHelper.ContainerNotFoundException;
 import uw.ops.agent.helper.DockerInfoHelper.DockerApiException;
+import uw.ops.agent.helper.vo.ContainerStatsRaw;
 import uw.ops.agent.helper.vo.CreateContainerParam;
 import uw.ops.agent.helper.vo.CreateContainerRaw;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.StandardProtocolFamily;
-import java.net.UnixDomainSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -37,135 +30,70 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class DockerInfoHelperTest {
 
-    /**
-     * 测试用 UDS 服务器：按请求返回预置响应。
-     */
-    private ServerSocketChannel serverChannel;
-    private Path socketFile;
-    private Thread serverThread;
-    private final AtomicReference<String> lastRequest = new AtomicReference<>();
-    private volatile Responder responder = request -> "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
-
-    @FunctionalInterface
-    private interface Responder {
-
-        /**
-         * 按请求行生成响应原文。
-         *
-         * @param requestLine 完整请求文本
-         * @return 响应原文(HTTP 报文)
-         */
-        String respond(String requestLine);
+    @Test
+    void createCannotOutliveRemainingTaskBudget() {
+        responder = request -> {
+            try {
+                Thread.sleep(400);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return FakeDockerDaemon.jsonResponse(201, "{\"Id\":\"budget-test\"}");
+        };
+        DockerInfoHelper.beginTaskBudget(80);
+        long started = System.nanoTime();
+        try {
+            assertThrows(DockerApiException.class,
+                    () -> DockerInfoHelper.createContainer("budget-test", new CreateContainerParam()));
+            assertTrue((System.nanoTime() - started) / 1_000_000 < 350,
+                    "create must share the task budget instead of its independent ten-minute timeout");
+            assertThrows(DockerApiException.class, () -> DockerInfoHelper.startContainer("budget-test"));
+        } finally {
+            DockerInfoHelper.endTaskBudget();
+        }
     }
+
+    @Test
+    void malformedOrEmptyPullStreamCannotSucceed() {
+        responder = request -> FakeDockerDaemon.jsonResponse(200, "<html>proxy error</html>");
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.pullImage("test/image:1", null));
+        responder = request -> FakeDockerDaemon.jsonResponse(200, "\n");
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.pullImage("test/image:1", null));
+        responder = request -> FakeDockerDaemon.jsonResponse(200, "{\"errorDetail\":{\"message\":\"denied\"}}\n");
+        assertThrows(DockerApiException.class, () -> DockerInfoHelper.pullImage("test/image:1", null));
+    }
+
+    /**
+     * 共享假 daemon（自环 UDS 服务器，按请求返回预置响应）；
+     * responder 为本类可变字段，经桥接闭包逐请求取最新值，测试体内直接赋值即可。
+     */
+    private final FakeDockerDaemon daemon = new FakeDockerDaemon();
+
+    private volatile FakeDockerDaemon.Responder responder = request -> "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
 
     @BeforeEach
     void startServer() throws IOException {
-        socketFile = Files.createTempFile("docker-api-test", ".sock");
-        Files.deleteIfExists(socketFile);
-        serverChannel = ServerSocketChannel.open(StandardProtocolFamily.UNIX);
-        serverChannel.bind(UnixDomainSocketAddress.of(socketFile.toString()));
-        serverThread = new Thread(() -> {
-            while (serverChannel.isOpen()) {
-                try (SocketChannel client = serverChannel.accept()) {
-                    String request = readRequest(client);
-                    lastRequest.set(request);
-                    byte[] response = responder.respond(request).getBytes(StandardCharsets.UTF_8);
-                    client.write(ByteBuffer.wrap(response));
-                    //Connection: close 语义：写完即关。
-                } catch (Exception e) {
-                    //服务器关闭。
-                }
-            }
-        }, "test-uds-server");
-        serverThread.setDaemon(true);
-        serverThread.start();
-        //静态客户端注入本用例的临时 socket 路径与 2 秒短超时。
-        injectClient();
+        daemon.setResponder(request -> responder.respond(request));
+        daemon.start();
     }
 
     @AfterEach
     void stopServer() throws IOException {
-        serverChannel.close();
-        Files.deleteIfExists(socketFile);
+        daemon.close();
     }
 
-    /**
-     * 读完整请求：先读到头结束符 \r\n\r\n，再按 Content-Length 读满请求体
-     * （写操作 POST 带 JSON 体，只读头会导致客户端写体时服务端已关闭）。
-     */
-    private String readRequest(SocketChannel client) throws IOException {
-        ByteBuffer buffer = ByteBuffer.allocate(8192);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        int headerEnd = -1;
-        while (headerEnd < 0) {
-            int n = client.read(buffer);
-            if (n < 0) {
-                break;
-            }
-            if (n > 0) {
-                out.write(buffer.array(), 0, n);
-                buffer.clear();
-                headerEnd = indexOfHeaderEnd(out.toByteArray());
-            }
-        }
-        if (headerEnd < 0) {
-            return new String(out.toByteArray(), StandardCharsets.UTF_8);
-        }
-        int contentLength = contentLengthOf(out.toByteArray(), headerEnd);
-        while (out.size() < headerEnd + 4 + contentLength) {
-            int n = client.read(buffer);
-            if (n < 0) {
-                break;
-            }
-            if (n > 0) {
-                out.write(buffer.array(), 0, n);
-                buffer.clear();
-            }
-        }
-        return new String(out.toByteArray(), StandardCharsets.UTF_8);
-    }
-
-    /**
-     * 定位头结束符位置（全量扫描，非仅尾部）。
-     */
-    private int indexOfHeaderEnd(byte[] data) {
-        for (int i = 0; i <= data.length - 4; i++) {
-            if (data[i] == '\r' && data[i + 1] == '\n' && data[i + 2] == '\r' && data[i + 3] == '\n') {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * 解析请求头内的 Content-Length（无声明返回 0）。
-     */
-    private int contentLengthOf(byte[] data, int headerEnd) {
-        String header = new String(data, 0, headerEnd, StandardCharsets.UTF_8);
-        for (String line : header.split("\r\n")) {
-            if (line.toLowerCase().startsWith("content-length:")) {
-                try {
-                    return Integer.parseInt(line.substring(15).trim());
-                } catch (NumberFormatException e) {
-                    return 0;
-                }
-            }
-        }
-        return 0;
-    }
-
-    /** 每用例注入本用例的临时 socket 路径与 2 秒短超时。 */
-    private void injectClient() {
-        DockerInfoHelper.initForTest(socketFile.toString(), 2000);
+    /** 最近一次请求原文（请求断言用）。 */
+    private String lastRequest() {
+        return daemon.requests().getLast();
     }
 
     @Test
     void contentLengthJsonParsed() {
-        responder = request -> "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 27\r\n\r\n{\"ApiVersion\":\"1.46\",\"x\":1}";
+        responder = request -> FakeDockerDaemon.jsonResponse(200, "{\"ApiVersion\":\"1.46\",\"x\":1}");
 
         DockerInfoHelper.negotiateApiVersion();
-        assertNotNull(lastRequest.get());
-        assertTrue(lastRequest.get().startsWith("GET /version"));
+        assertNotNull(lastRequest());
+        assertTrue(lastRequest().startsWith("GET /version"));
     }
 
     @Test
@@ -308,9 +236,9 @@ class DockerInfoHelperTest {
         assertEquals("app-1", events.get(0).getActor().getAttributes().get("name"));
         assertEquals("cid002", events.get(1).getActorId());
         //窗口参数：sec.nanos 格式（纳秒精度）+ type=container 过滤器。
-        assertTrue(lastRequest.get().contains("since=1700000000.000000000"), "since format: " + lastRequest.get());
-        assertTrue(lastRequest.get().contains("until=1700000060.000000000"), "until format: " + lastRequest.get());
-        assertTrue(lastRequest.get().contains("type"), "filters present: " + lastRequest.get());
+        assertTrue(lastRequest().contains("since=1700000000.000000000"), "since format: " + lastRequest());
+        assertTrue(lastRequest().contains("until=1700000060.000000000"), "until format: " + lastRequest());
+        assertTrue(lastRequest().contains("type"), "filters present: " + lastRequest());
     }
 
     @Test
@@ -408,5 +336,81 @@ class DockerInfoHelperTest {
         assertThrows(DockerApiException.class, () -> DockerInfoHelper.stopContainer("a b", 30));
         assertThrows(DockerApiException.class, () -> DockerInfoHelper.removeContainer("../etc"));
         assertThrows(DockerApiException.class, () -> DockerInfoHelper.createContainer("a?b", new CreateContainerParam()));
+    }
+
+    /**
+     * 真实 daemon 形状回归：pids_stats.limit 对未设限额返回 uint64 最大值
+     * (18446744073709551615)，直接绑 long 会 InputCoercionException 拖垮整个 stats 解析
+     * （该容器性能全部 NULL）；BigInteger 承接并归一化 0=未设。
+     */
+    @Test
+    void pidsLimitUint64MaxParsedAsUnlimited() {
+        String body = "{\"pids_stats\":{\"current\":13,\"limit\":18446744073709551615}}";
+        ContainerStatsRaw stats = JsonUtils.parse(body, ContainerStatsRaw.class);
+        assertNotNull(stats.getPidsStats());
+        assertEquals(13L, stats.getPidsStats().getCurrent());
+        assertEquals(-1L, stats.getPidsStats().getLimit());
+        //正常限额（小数值）原样读取。
+        ContainerStatsRaw limited = JsonUtils.parse("{\"pids_stats\":{\"current\":5,\"limit\":512}}", ContainerStatsRaw.class);
+        assertEquals(512L, limited.getPidsStats().getLimit());
+    }
+
+    /**
+     * 镜像准备（F02）：本地已存在（GET /images/{ref}/json 200）不拉取。
+     */
+    @Test
+    void ensureImageSkipsWhenLocalExists() throws DockerApiException {
+        responder = request -> {
+            assertTrue(request.startsWith("GET /images/"), "unexpected request: " + request);
+            return FakeDockerDaemon.jsonResponse(200, "{\"Id\":\"sha256:abc123\"}");
+        };
+        DockerInfoHelper.ensureImage("registry.uw.local/app/web:1.0", "dGVzdC1jcmVk");
+        //本地命中即短路：pull 端点从未被请求（否则 responder 断言失败）。
+    }
+
+    /**
+     * 镜像准备（F02）：本地缺失（404）→ 带 X-Registry-Auth 头 POST /images/create（tag 引用
+     * 拆分 fromImage/tag），事件流无 error 即成功。
+     */
+    @Test
+    void ensureImagePullsWithAuthWhenMissing() throws DockerApiException {
+        daemon.imagesNotExistByDefault();
+        String pullBody = "{\"status\":\"Pulling from web\"}\n{\"status\":\"Download complete\"}\n";
+        responder = request -> {
+            if (request.startsWith("GET /images/")) {
+                return FakeDockerDaemon.jsonResponse(404, "{\"message\":\"No such image\"}");
+            }
+            if (request.startsWith("POST /images/create")) {
+                assertTrue(request.contains("fromImage="), "pull must carry fromImage: " + request);
+                assertTrue(request.contains("tag=1.0"), "tag reference must split into tag param: " + request);
+                assertTrue(request.contains("X-Registry-Auth: dGVzdC1jcmVk"), "pull must carry registry auth header");
+                return FakeDockerDaemon.jsonResponse(200, pullBody);
+            }
+            throw new AssertionError("unexpected request: " + request);
+        };
+        DockerInfoHelper.ensureImage("registry.uw.local/app/web:1.0", "dGVzdC1jcmVk");
+    }
+
+    /**
+     * 镜像准备（F02）：digest 引用整体作 fromImage（不拆 tag）；事件流含 error 即失败
+     * （认证失败/tag 不存在等以 {"error":...} 行报告，HTTP 状态仍 200）。
+     */
+    @Test
+    void pullImageFailsOnErrorEvent() {
+        daemon.imagesNotExistByDefault();
+        String pullBody = "{\"status\":\"Pulling\"}\n{\"errorDetail\":{\"message\":\"auth failed\"},\"error\":\"unauthorized: authentication required\"}\n";
+        responder = request -> {
+            if (request.startsWith("GET /images/")) {
+                return FakeDockerDaemon.jsonResponse(404, "{\"message\":\"No such image\"}");
+            }
+            if (request.startsWith("POST /images/create")) {
+                assertFalse(request.contains("tag="), "digest pull must not carry tag param: " + request);
+                return FakeDockerDaemon.jsonResponse(200, pullBody);
+            }
+            throw new AssertionError("unexpected request: " + request);
+        };
+        DockerApiException ex = assertThrows(DockerApiException.class,
+                () -> DockerInfoHelper.ensureImage("registry.uw.local/app/web@sha256:abc123", "dGVzdC1jcmVk"));
+        assertTrue(ex.getMessage().contains("image pull failed"), "error message should locate pull failure: " + ex.getMessage());
     }
 }

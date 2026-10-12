@@ -1,7 +1,7 @@
 package uw.ops.agent.vo.sub;
 
 /**
- * 网卡静态信息（每小时 HostInfo 上报，见 HostInfo.networkInfo）。
+ * 网卡静态信息（每小时 HostInfo 上报，见 HostInfo.networkInfo；按 index 升序）。
  * 与 {@link NetworkStats} 分离：静态属性不随每分钟 stats 重复传输。
  */
 public class NetworkInfo {
@@ -12,7 +12,7 @@ public class NetworkInfo {
     private int index;
 
     /**
-     * 网卡设备
+     * 网卡设备名。
      */
     private String name;
 
@@ -22,12 +22,12 @@ public class NetworkInfo {
     private String mac;
 
     /**
-     * 网速
+     * 协商速率。
      */
     private long speed;
 
     /**
-     * ip地址。
+     * IPv4 地址列表的字符串形式（如 "[10.0.0.2, 10.0.0.3]"）。
      */
     private String ip;
 
