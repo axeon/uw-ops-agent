@@ -2,7 +2,7 @@
   "comment": [
     "Collected on Debian 12 for linux/arm64 and linux/amd64 with GraalVM CE 25.3.4.1 and JDK 25.0.4.1 on 2026-09-03.",
     "The two architecture results were identical except for the JNA native library resource; this file contains their union.",
-    "The com.sun.jna.platform.mac.* reflection entries and the proxy section are additions for running the macOS/arm64 local native binary (OSHI reads SystemB via a JNA library proxy); they are inert in Linux builds.",
+    "The com.sun.jna.platform.mac.* reflection entries are additions for running the macOS/arm64 local native binary (OSHI reads SystemB on macOS); they are inert in Linux builds. The SystemB library proxy itself is registered in the sibling proxy-config.json (the unified file schema has no proxy section).",
     "Application models under uw.ops.agent.vo and uw.ops.agent.helper.vo are registered by AgentReflectionFeature."
   ],
   "reflection": [
@@ -1373,13 +1373,6 @@
     {
       "module": "java.base",
       "glob": "sun/net/idn/uidna.spp"
-    }
-  ],
-  "proxy": [
-    {
-      "interfaces": [
-        "com.sun.jna.platform.mac.SystemB"
-      ]
     }
   ]
 }

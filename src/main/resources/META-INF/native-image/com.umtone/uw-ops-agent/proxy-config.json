@@ -1,0 +1,7 @@
+[
+  {
+    "interfaces": [
+      "com.sun.jna.platform.mac.SystemB"
+    ]
+  }
+]

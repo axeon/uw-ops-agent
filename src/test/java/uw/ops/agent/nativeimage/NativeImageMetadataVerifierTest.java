@@ -48,16 +48,7 @@ class NativeImageMetadataVerifierTest {
         assertNotNull(metadata);
         try (InputStream inputStream = metadata.openStream()) {
             Map<?, ?> metadataConfig = JsonUtils.parse(inputStream, Map.class);
-            assertEquals(Set.of("comment", "proxy", "reflection", "resources"), metadataConfig.keySet());
-            //proxy 段仅限 JNA 库接口（macOS 本机二进制经 Native.load 走动态代理），
-            //条目必须是可加载的真实接口——挡住非接口类（如 CallbackReference）混入。
-            for (Object entry : (List<?>) metadataConfig.get("proxy")) {
-                for (String interfaceName : (List<String>) ((Map<?, ?>) entry).get("interfaces")) {
-                    assertTrue(interfaceName.startsWith("com.sun.jna."), "proxy interface " + interfaceName);
-                    assertTrue(Class.forName(interfaceName, false, classLoader).isInterface(),
-                            "proxy interface " + interfaceName);
-                }
-            }
+            assertEquals(Set.of("comment", "reflection", "resources"), metadataConfig.keySet());
             Set<String> resourceGlobs = ((List<?>) metadataConfig.get("resources")).stream()
                     .map(Map.class::cast)
                     .map(resource -> (String) resource.get("glob"))
@@ -78,5 +69,19 @@ class NativeImageMetadataVerifierTest {
         assertNull(classLoader.getResource("META-INF/native-image/config/jni-config.json"));
         assertNull(classLoader.getResource("META-INF/native-image/config/proxy-config.json"));
         assertNull(classLoader.getResource("META-INF/native-image/config/resource-config.json"));
+        //统一文件 schema 无 proxy 段（合法顶层键仅 comment/reflection/resources/foreign），
+        //JNA 库接口代理走同目录独立 proxy-config.json；条目必须是可加载的真实接口——
+        //挡住非接口类（如 CallbackReference）混入。
+        URL proxyConfig = classLoader.getResource("META-INF/native-image/com.umtone/uw-ops-agent/proxy-config.json");
+        assertNotNull(proxyConfig);
+        try (InputStream inputStream = proxyConfig.openStream()) {
+            for (Object entry : (List<?>) JsonUtils.parse(inputStream, List.class)) {
+                for (String interfaceName : (List<String>) ((Map<?, ?>) entry).get("interfaces")) {
+                    assertTrue(interfaceName.startsWith("com.sun.jna."), "proxy interface " + interfaceName);
+                    assertTrue(Class.forName(interfaceName, false, classLoader).isInterface(),
+                            "proxy interface " + interfaceName);
+                }
+            }
+        }
     }
 }

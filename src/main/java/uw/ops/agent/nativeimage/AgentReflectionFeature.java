@@ -30,7 +30,9 @@ import java.util.stream.Stream;
  *   <li>native-image.properties 的 {@code --exact-reachability-metadata} 包白名单必须包含
  *       新增的模型包，否则该包的注册会被 exact 过滤丢弃；</li>
  *   <li>reachability-metadata.json 只登记第三方类（JDK/JNA/oshi），应用模型一律由本类注册，
- *       不得手写进该文件（NativeImageMetadataVerifierTest 有对应断言）；</li>
+ *       不得手写进该文件（NativeImageMetadataVerifierTest 有对应断言）；统一文件 schema 无
+ *       proxy 段（合法顶层键仅 comment/reflection/resources/foreign），JNA 库接口代理登记在
+ *       同目录独立 proxy-config.json（如 macOS 本机二进制所需的 SystemB）；</li>
  *   <li>新增模型包或子包无需改本类（递归扫描自动覆盖），但需在发布前跑
  *       {@code uw-ops-agent --verify-native-metadata}（{@link NativeImageMetadataVerifier}）
  *       验证绑定路径在 native 下真实可用。</li>
