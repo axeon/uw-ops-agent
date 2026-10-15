@@ -281,7 +281,7 @@ public class MainService {
                 OpsAgentApi.uploadHostStats(payload);
                 return;
             } catch (Throwable e) {
-                log.error("stats upload attempt {} failed, errorType={}", i + 1, e.getClass().getSimpleName());
+                log.error("stats upload attempt {} failed, err={}", i + 1, e.toString(), e);
             }
             try {
                 Thread.sleep(STATS_UPLOAD_RETRY_INTERVAL);
@@ -493,7 +493,7 @@ public class MainService {
                 taskChannel.report(opsTask);
                 return true;
             } catch (Throwable e) {
-                log.error("uw-ops-agent report attempt {} failed, errorType={}", i + 1, e.getClass().getSimpleName());
+                log.error("uw-ops-agent report attempt {} failed, err={}", i + 1, e.toString(), e);
             }
             // 显式管理重置导致 secret 缺失时停止重试。
             if (StringUtils.isBlank(SecretStore.load())) {
