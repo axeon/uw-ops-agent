@@ -16,11 +16,6 @@ public class MemStats {
     private long usable;
 
     /**
-     * 内存页大小(字节)。
-     */
-    private long pageSize;
-
-    /**
      * swap 总大小(字节)。
      */
     private long swapTotal;
@@ -40,27 +35,14 @@ public class MemStats {
      */
     private long virtualInUse;
 
-    /**
-     * swap 换入页数。
-     */
-    private long swapPagesIn;
 
-    /**
-     * swap 换出页数。
-     */
-    private long swapPagesOut;
-
-
-    public MemStats(long total, long usable, long pageSize, long swapTotal, long swapUsed, long virtualMax, long virtualInUse, long swapPagesIn, long swapPagesOut) {
+    public MemStats(long total, long usable, long swapTotal, long swapUsed, long virtualMax, long virtualInUse) {
         this.total = total;
         this.usable = usable;
-        this.pageSize = pageSize;
         this.swapTotal = swapTotal;
         this.swapUsed = swapUsed;
         this.virtualMax = virtualMax;
         this.virtualInUse = virtualInUse;
-        this.swapPagesIn = swapPagesIn;
-        this.swapPagesOut = swapPagesOut;
     }
 
     public MemStats() {
@@ -80,14 +62,6 @@ public class MemStats {
 
     public void setUsable(long usable) {
         this.usable = usable;
-    }
-
-    public long getPageSize() {
-        return pageSize;
-    }
-
-    public void setPageSize(long pageSize) {
-        this.pageSize = pageSize;
     }
 
     public long getSwapTotal() {
@@ -120,21 +94,5 @@ public class MemStats {
 
     public void setVirtualInUse(long virtualInUse) {
         this.virtualInUse = virtualInUse;
-    }
-
-    public long getSwapPagesIn() {
-        return swapPagesIn;
-    }
-
-    public void setSwapPagesIn(long swapPagesIn) {
-        this.swapPagesIn = swapPagesIn;
-    }
-
-    public long getSwapPagesOut() {
-        return swapPagesOut;
-    }
-
-    public void setSwapPagesOut(long swapPagesOut) {
-        this.swapPagesOut = swapPagesOut;
     }
 }

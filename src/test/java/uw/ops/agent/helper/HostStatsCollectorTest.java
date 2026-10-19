@@ -93,7 +93,6 @@ class HostStatsCollectorTest {
         assertNull(sample.getMemPercent());
         assertNull(sample.getMemTotal());
         assertNull(sample.getPidCount());
-        assertNull(sample.getPidsLimit());
         assertNull(sample.getDiskRead());
     }
 
@@ -136,20 +135,14 @@ class HostStatsCollectorTest {
         ContainerInfo.Stats decoded = JsonUtils.parse(JsonUtils.toString(new ContainerInfo.Stats()), ContainerInfo.Stats.class);
         assertNull(decoded.getCpuPercent());
         assertNull(decoded.getCpuThrottle());
-        assertNull(decoded.getCpuThrottleFreq());
         assertNull(decoded.getMemPercent());
         assertNull(decoded.getMemUsage());
         assertNull(decoded.getMemTotal());
         assertNull(decoded.getPidCount());
-        assertNull(decoded.getPidsLimit());
         assertNull(decoded.getDiskRead());
         assertNull(decoded.getDiskWrite());
         assertNull(decoded.getNetworkIn());
         assertNull(decoded.getNetworkOut());
-        assertNull(decoded.getRxDropped());
-        assertNull(decoded.getTxDropped());
-        assertNull(decoded.getRxErrors());
-        assertNull(decoded.getTxErrors());
     }
 
     @Test

@@ -16,11 +16,6 @@ public class FsStats {
     private String volume;
 
     /**
-     * 文件系统类型(ext4/xfs...)。
-     */
-    private String fsType;
-
-    /**
      * 挂载点。
      */
     private String mount;
@@ -49,14 +44,6 @@ public class FsStats {
 
     public void setVolume(String volume) {
         this.volume = volume;
-    }
-
-    public String getFsType() {
-        return fsType;
-    }
-
-    public void setFsType(String fsType) {
-        this.fsType = fsType;
     }
 
     public String getMount() {

@@ -22,11 +22,6 @@ public class ContainerCounters {
     public Long throttledNanos;
 
     /**
-     * 累计被限流周期数。
-     */
-    public Long throttledPeriods;
-
-    /**
      * 累计 CFS 周期数。
      */
     public Long periods;
@@ -52,11 +47,6 @@ public class ContainerCounters {
     public Long pidCount;
 
     /**
-     * pids 限额（0=未设）。
-     */
-    public Long pidsLimit;
-
-    /**
      * networks 块是否存在（host 模式整个块缺失）。
      */
     public boolean networksPresent;
@@ -70,26 +60,6 @@ public class ContainerCounters {
      * networks.*.tx_bytes 求和。
      */
     public Long netTx;
-
-    /**
-     * rx_dropped 求和。
-     */
-    public Long rxDropped;
-
-    /**
-     * tx_dropped 求和。
-     */
-    public Long txDropped;
-
-    /**
-     * rx_errors 求和。
-     */
-    public Long rxErrors;
-
-    /**
-     * tx_errors 求和。
-     */
-    public Long txErrors;
 
     /**
      * blkio Read 求和（累计字节）。

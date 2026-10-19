@@ -303,7 +303,7 @@ public class SystemInfoHelper {
     public static MemStats buildMemStats() {
         GlobalMemory memory = hal.getMemory();
         VirtualMemory vm = memory.getVirtualMemory();
-        return new MemStats(memory.getTotal(), memory.getAvailable(), memory.getPageSize(), vm.getSwapTotal(), vm.getSwapUsed(), vm.getVirtualMax(), vm.getVirtualInUse(), vm.getSwapPagesIn(), vm.getSwapPagesOut());
+        return new MemStats(memory.getTotal(), memory.getAvailable(), vm.getSwapTotal(), vm.getSwapUsed(), vm.getVirtualMax(), vm.getVirtualInUse());
     }
 
     /**
@@ -335,7 +335,6 @@ public class SystemInfoHelper {
             }
             FsStats diskStats = new FsStats();
             diskStats.setName(fs.getName());
-            diskStats.setFsType(fs.getType());
             diskStats.setMount(fs.getMount());
             diskStats.setVolume(fs.getVolume());
             diskStats.setUsable(fs.getUsableSpace());

@@ -301,36 +301,6 @@ public class ContainerInfo {
          */
         private Integer pidCount;
 
-        /**
-         * throttle频率(throttled_periods/periods窗口比,百分比)——尖峰画像，不落库。
-         */
-        private Double cpuThrottleFreq;
-
-        /**
-         * 窗口丢包增量(rx_dropped)，不落库，Center写缓存供告警消费。
-         */
-        private Long rxDropped;
-
-        /**
-         * 窗口丢包增量(tx_dropped)，不落库。
-         */
-        private Long txDropped;
-
-        /**
-         * 窗口错包增量(rx_errors)，不落库。
-         */
-        private Long rxErrors;
-
-        /**
-         * 窗口错包增量(tx_errors)，不落库。
-         */
-        private Long txErrors;
-
-        /**
-         * pids cgroup限额(0=未设)，不落库，逼近限额告警用。
-         */
-        private Long pidsLimit;
-
         public Double getCpuPercent() {
             return cpuPercent;
         }
@@ -409,54 +379,6 @@ public class ContainerInfo {
 
         public void setPidCount(Integer pidCount) {
             this.pidCount = pidCount;
-        }
-
-        public Double getCpuThrottleFreq() {
-            return cpuThrottleFreq;
-        }
-
-        public void setCpuThrottleFreq(Double cpuThrottleFreq) {
-            this.cpuThrottleFreq = cpuThrottleFreq;
-        }
-
-        public Long getRxDropped() {
-            return rxDropped;
-        }
-
-        public void setRxDropped(Long rxDropped) {
-            this.rxDropped = rxDropped;
-        }
-
-        public Long getTxDropped() {
-            return txDropped;
-        }
-
-        public void setTxDropped(Long txDropped) {
-            this.txDropped = txDropped;
-        }
-
-        public Long getRxErrors() {
-            return rxErrors;
-        }
-
-        public void setRxErrors(Long rxErrors) {
-            this.rxErrors = rxErrors;
-        }
-
-        public Long getTxErrors() {
-            return txErrors;
-        }
-
-        public void setTxErrors(Long txErrors) {
-            this.txErrors = txErrors;
-        }
-
-        public Long getPidsLimit() {
-            return pidsLimit;
-        }
-
-        public void setPidsLimit(Long pidsLimit) {
-            this.pidsLimit = pidsLimit;
         }
     }
 
