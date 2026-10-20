@@ -155,6 +155,12 @@ public class ContainerStatsRaw {
         @JsonProperty("periods")
         private Long periods;
 
+        /**
+         * 累计被限流周期数。
+         */
+        @JsonProperty("throttled_periods")
+        private Long throttledPeriods;
+
         public Long getThrottledTime() {
             return throttledTime;
         }
@@ -169,6 +175,14 @@ public class ContainerStatsRaw {
 
         public void setPeriods(Long periods) {
             this.periods = periods;
+        }
+
+        public Long getThrottledPeriods() {
+            return throttledPeriods;
+        }
+
+        public void setThrottledPeriods(Long throttledPeriods) {
+            this.throttledPeriods = throttledPeriods;
         }
     }
 
@@ -281,6 +295,30 @@ public class ContainerStatsRaw {
         @JsonProperty("tx_bytes")
         private Long txBytes;
 
+        /**
+         * 接收丢包累计。
+         */
+        @JsonProperty("rx_dropped")
+        private Long rxDropped;
+
+        /**
+         * 发送丢包累计。
+         */
+        @JsonProperty("tx_dropped")
+        private Long txDropped;
+
+        /**
+         * 接收错包累计。
+         */
+        @JsonProperty("rx_errors")
+        private Long rxErrors;
+
+        /**
+         * 发送错包累计。
+         */
+        @JsonProperty("tx_errors")
+        private Long txErrors;
+
         public Long getRxBytes() {
             return rxBytes;
         }
@@ -295,6 +333,38 @@ public class ContainerStatsRaw {
 
         public void setTxBytes(Long txBytes) {
             this.txBytes = txBytes;
+        }
+
+        public Long getRxDropped() {
+            return rxDropped;
+        }
+
+        public void setRxDropped(Long rxDropped) {
+            this.rxDropped = rxDropped;
+        }
+
+        public Long getTxDropped() {
+            return txDropped;
+        }
+
+        public void setTxDropped(Long txDropped) {
+            this.txDropped = txDropped;
+        }
+
+        public Long getRxErrors() {
+            return rxErrors;
+        }
+
+        public void setRxErrors(Long rxErrors) {
+            this.rxErrors = rxErrors;
+        }
+
+        public Long getTxErrors() {
+            return txErrors;
+        }
+
+        public void setTxErrors(Long txErrors) {
+            this.txErrors = txErrors;
         }
     }
 

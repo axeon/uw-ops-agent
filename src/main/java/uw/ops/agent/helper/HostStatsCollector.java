@@ -395,6 +395,8 @@ public class HostStatsCollector {
         if (knownCounter(curr.pidCount) && curr.pidCount <= Integer.MAX_VALUE) {
             stats.setPidCount(curr.pidCount.intValue());
         }
+        //-1 是 daemon 明确报告的无限额；缺字段保持 NULL，不能伪造为无限额。
+        stats.setPidsLimit(curr.pidsLimit);
         if (prev == null || !gapValid(prev.monoNanos, curr.monoNanos)) { return stats; }
         double seconds = (curr.monoNanos - prev.monoNanos) / 1_000_000_000.0;
         Long cpuDiff = counterDelta(curr.cpuTotalUsage, prev.cpuTotalUsage);
@@ -407,10 +409,18 @@ public class HostStatsCollector {
             if (throttled != null) {
                 stats.setCpuThrottle(Math.min(100, round2(throttled / 1_000_000_000.0 / seconds * 100)));
             }
+            Long throttledPeriods = counterDelta(curr.throttledPeriods, prev.throttledPeriods);
+            if (throttledPeriods != null && throttledPeriods <= periodsDelta) {
+                stats.setCpuThrottleFreq(round2(throttledPeriods * 100.0 / periodsDelta));
+            }
         }
         if (prev.networksPresent && curr.networksPresent) {
             stats.setNetworkIn(counterRate(curr.netRx, prev.netRx, seconds));
             stats.setNetworkOut(counterRate(curr.netTx, prev.netTx, seconds));
+            stats.setRxDropped(counterDelta(curr.rxDropped, prev.rxDropped));
+            stats.setTxDropped(counterDelta(curr.txDropped, prev.txDropped));
+            stats.setRxErrors(counterDelta(curr.rxErrors, prev.rxErrors));
+            stats.setTxErrors(counterDelta(curr.txErrors, prev.txErrors));
         }
         stats.setDiskRead(counterRate(curr.diskRead, prev.diskRead, seconds));
         stats.setDiskWrite(counterRate(curr.diskWrite, prev.diskWrite, seconds));
@@ -452,6 +462,7 @@ public class HostStatsCollector {
                 if (throttling != null) {
                     counter.throttledNanos = throttling.getThrottledTime();
                     counter.periods = throttling.getPeriods();
+                    counter.throttledPeriods = throttling.getThrottledPeriods();
                 }
             }
             ContainerStatsRaw.MemorySection memory = stats.getMemoryStats();
@@ -466,6 +477,7 @@ public class HostStatsCollector {
             ContainerStatsRaw.PidsSection pids = stats.getPidsStats();
             if (pids != null) {
                 counter.pidCount = pids.getCurrent();
+                counter.pidsLimit = pids.getLimit();
             }
             normalizeNetworks(counter, stats.getNetworks());
             normalizeDisk(counter, stats.getBlkioStats());
@@ -480,9 +492,17 @@ public class HostStatsCollector {
         counter.networksPresent = true;
         counter.netRx = 0L;
         counter.netTx = 0L;
+        counter.rxDropped = 0L;
+        counter.txDropped = 0L;
+        counter.rxErrors = 0L;
+        counter.txErrors = 0L;
         for (ContainerStatsRaw.NetworkIfStats value : networks.values()) {
             counter.netRx = completeSum(counter.netRx, value == null ? null : value.getRxBytes());
             counter.netTx = completeSum(counter.netTx, value == null ? null : value.getTxBytes());
+            counter.rxDropped = completeSum(counter.rxDropped, value == null ? null : value.getRxDropped());
+            counter.txDropped = completeSum(counter.txDropped, value == null ? null : value.getTxDropped());
+            counter.rxErrors = completeSum(counter.rxErrors, value == null ? null : value.getRxErrors());
+            counter.txErrors = completeSum(counter.txErrors, value == null ? null : value.getTxErrors());
         }
     }
 
