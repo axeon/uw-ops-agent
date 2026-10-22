@@ -123,7 +123,7 @@ public class HostStatsCollector {
         try {
             inventory = DockerInfoHelper.listAllContainers();
         } catch (Throwable e) {
-            log.warn("docker inventory failed: {}", e.getClass().getSimpleName());
+            log.warn("docker inventory failed: {}", e.toString());
         }
         //② running 容器 stats（差分第二点），整轮 12s 预算；失败容器缺省（该项 NULL）。
         Map<String, ContainerStatsRaw> statsMap = null;
@@ -137,7 +137,7 @@ public class HostStatsCollector {
                 }
                 statsMap = DockerInfoHelper.containerStatsBatch(runningIds);
             } catch (Throwable e) {
-                log.error("stats collection failed: {}", e.getClass().getSimpleName());
+                log.error("stats collection failed: {}", e.toString());
             }
         }
         //③ 差分与事件合并组装（Host 边界快照在组装内部采集，与 stats 同刻 δ=0）。
@@ -155,7 +155,7 @@ public class HostStatsCollector {
         try {
             recordContainerEvents(DockerInfoHelper.containerEvents(sinceNano, untilNano), untilNano);
         } catch (Throwable e) {
-            log.warn("docker events poll failed, skip this round: {}", e.getClass().getSimpleName());
+            log.warn("docker events poll failed, skip this round: {}", e.toString());
         }
     }
 

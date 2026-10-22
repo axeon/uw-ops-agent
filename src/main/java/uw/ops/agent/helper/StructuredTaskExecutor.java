@@ -161,8 +161,8 @@ public final class StructuredTaskExecutor {
             throw e;
         } catch (Exception e) {
             //daemon响应/异常可能回显秘密载荷，日志与上报均只记录固定摘要。
-            log.error("structured task failed, taskId={}, containerId={}, errorType={}",
-                    opsTask.getId(), opsTask.getContainerId(), e.getClass().getSimpleName());
+            log.error("structured task failed, taskId={}, containerId={}, err={}",
+                    opsTask.getId(), opsTask.getContainerId(), e.toString());
             throw new TaskExecutionException("docker task failed: execution rejected.");
         } finally {
             DockerInfoHelper.endTaskBudget();
@@ -314,7 +314,7 @@ public final class StructuredTaskExecutor {
             log.info("structured stop target gone before remove, taskId={}, dockerId={}", opsTask.getId(), inspect.getId());
         } catch (DockerInfoHelper.DockerApiException e) {
             log.error("structured stop remove failed, taskId={}, dockerId={}, err={}",
-                    opsTask.getId(), inspect.getId(), e.getClass().getSimpleName());
+                    opsTask.getId(), inspect.getId(), e.toString());
             throw new StopRemoveFailedException("container stopped but remove failed: exitCode="
                     + (exitCode == null ? "unknown" : exitCode));
         }
