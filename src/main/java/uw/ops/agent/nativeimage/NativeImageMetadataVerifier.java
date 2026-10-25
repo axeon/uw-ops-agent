@@ -105,17 +105,30 @@ public final class NativeImageMetadataVerifier {
         try {
             temporary = Files.createTempFile("ops-probe-metadata-", ".json");
             ProbeScriptEntry expected = new ProbeScriptEntry("native-probe", 123,
-                    "{\"type\":\"http\",\"url\":\"http://127.0.0.1:8080/health\",\"expect\":[200,204]}");
+                    "{\"tcpProbes\":[{\"host\":\"127.0.0.1\",\"port\":8080}],"
+                            + "\"httpProbes\":[{\"url\":\"http://127.0.0.1:8080/health\",\"expectCode\":[200,204],\"expectBody\":[\"UP\"]}],"
+                            + "\"cmdProbes\":[{\"script\":\"exit 0\",\"expectOutput\":[\"UP\"]}]}");
             Files.write(temporary, JsonUtils.toBytes(expected));
             ProbeScriptEntry restored = JsonUtils.parse(Files.readAllBytes(temporary), ProbeScriptEntry.class);
             require(restored != null && "native-probe".equals(restored.getDockerId())
                     && restored.getContainerId() == 123, "probe persistence binding");
-            //ProbeSpec DSL 反射绑定（label/taskData 两路径的 JSON 契约）。
+            //ProbeSpec DSL 反射绑定（label/taskData 两路径的 JSON 契约，三组探测数组嵌套绑定）。
             ProbeSpec spec = JsonUtils.parse(restored.getScript(), ProbeSpec.class);
-            require(spec != null && "http".equals(spec.getType())
-                    && "http://127.0.0.1:8080/health".equals(spec.getUrl())
-                    && spec.getExpect() != null && spec.getExpect().size() == 2
-                    && spec.getExpect().get(1) == 204, "probe spec binding");
+            require(spec != null && spec.probeCount() == 3
+                    && spec.getTcpProbes() != null && spec.getTcpProbes().size() == 1
+                            && spec.getTcpProbes().get(0).getPort() == 8080
+                    && spec.getHttpProbes() != null && spec.getHttpProbes().size() == 1
+                            && "http://127.0.0.1:8080/health".equals(spec.getHttpProbes().get(0).getUrl())
+                            && spec.getHttpProbes().get(0).getExpectCode() != null
+                            && spec.getHttpProbes().get(0).getExpectCode().size() == 2
+                            && spec.getHttpProbes().get(0).getExpectCode().get(1) == 204
+                            && spec.getHttpProbes().get(0).getExpectBody() != null
+                            && spec.getHttpProbes().get(0).getExpectBody().get(0).equals("UP")
+                    && spec.getCmdProbes() != null && spec.getCmdProbes().size() == 1
+                            && "exit 0".equals(spec.getCmdProbes().get(0).getScript())
+                            && spec.getCmdProbes().get(0).getExpectOutput() != null
+                            && spec.getCmdProbes().get(0).getExpectOutput().get(0).equals("UP"),
+                    "probe spec binding");
         } catch (IOException e) {
             throw new IllegalStateException("probe persistence verification failed.", e);
         } finally {

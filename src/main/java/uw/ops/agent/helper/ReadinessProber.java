@@ -40,13 +40,17 @@ import java.util.TreeMap;
  *   <li>tcp/http DSL（无 secret）→ 容器 label {@code uw.ops.probe}（create 携带、主轮 inventory
  *       声明式收敛：label 在=配置在，label 变=条目更新，容器删=条目消失）。Docker 元数据即
  *       持久化真相源，agent 重启后零恢复动作；探针配置变更无需重新部署。</li>
- *   <li>exec DSL（或含 secret 占位符的 tcp/http）→ START taskData（docker.probeConfig）
+ *   <li>含 cmd 的 DSL（或含 secret 占位符的 tcp/http）→ START taskData（docker.probeConfig）
  *       下发，缓存条目落盘，agent 重启经 {@link #restoreFromDisk()} 重建（不落盘则该类容器
  *       永久失去探测）。</li>
  * </ul>
  * <p>
+ * <b>多探测并存：</b>tcpProbes/httpProbes/cmdProbes 三组数组同时生效（同类多条、跨类并存），
+ * 单轮遍历全部执行，任一失败即判定失败（AND 语义——全部通过才算就绪），失败原因取首个
+ * 失败探测的短码。
+ * <p>
  * <b>节奏：</b>启动期 5s 密集探测（首次成功即回落），稳态 15s；tcp=http=JVM 原生探测
- * （零进程 spawn、毫秒级），exec=/bin/sh 进程（默认 3s 超时）。探测调度 5s 一轮、条目按
+ * （零进程 spawn、毫秒级），cmd=/bin/sh 进程（默认 3s 超时）。探测调度 5s 一轮、条目按
  * {@code nextProbeAt} 到期执行。
  * <p>
  * <b>聚合与上报：</b>agent 只做无判断计数（seq 单调、连续失败数、连续成功毫秒数、失败原因
@@ -95,18 +99,23 @@ public final class ReadinessProber {
     public static final long PROBE_TICK_SECONDS = 5;
 
     /**
-     * 默认超时：tcp/http 连接毫秒级、exec 3 秒（终值 DSL 的 timeoutMs 可覆盖，钳制范围同 center 侧）。
+     * 默认超时：tcp/http 连接毫秒级、cmd 3 秒（终值 DSL 的 timeoutMs 可覆盖，钳制范围同 center 侧）。
      */
     static final int TCP_DEFAULT_TIMEOUT_MILLIS = 2_000;
 
     static final int HTTP_DEFAULT_TIMEOUT_MILLIS = 2_000;
 
-    static final int EXEC_DEFAULT_TIMEOUT_MILLIS = 3_000;
+    static final int CMD_DEFAULT_TIMEOUT_MILLIS = 3_000;
 
     /**
      * 失败原因短码上限（协议字段约束，Center 台账列 varchar(32)）。
      */
     private static final int REASON_LIMIT = 32;
+
+    /**
+     * expectBody 判定的响应体读取上限（字符，粗略即可）：健康端点响应远小于此，超限截断足够判定。
+     */
+    private static final int HTTP_BODY_READ_LIMIT = 64 * 1024;
 
     /** exec 退出码提取（失败路径每次探测命中，预编译）。 */
     private static final java.util.regex.Pattern EXEC_EXIT_CODE = java.util.regex.Pattern.compile("exited with code (\\d+)");
@@ -137,7 +146,7 @@ public final class ReadinessProber {
         final long containerId;
 
         /**
-         * 终值探针配置（tcp/http/exec）。
+         * 终值探针配置（tcpProbes/httpProbes/cmdProbes 三组并存）。
          */
         final ProbeSpec spec;
 
@@ -228,13 +237,12 @@ public final class ReadinessProber {
     //==================== 集合管理（类锁串行） ====================
 
     /**
-     * taskData 路径注册（exec/含 secret 的终值 DSL JSON，随 START 下发；幂等命中与新建两条路径都覆盖）：
+     * taskData 路径注册（含 cmd/含 secret 的终值 DSL JSON，随 START 下发；幂等命中与新建两条路径都覆盖）：
      * 条目内存登记并落盘（agent 升级/重启经 {@link #restoreFromDisk()} 重建）。
-     * 兼容旧格式：内容非 JSON 对象（无 type 字段）时按 exec 包装存量 shell 脚本。
      *
      * @param dockerId    Docker 容器 ID
      * @param containerId ops 台账容器ID
-     * @param dslJson     终值 DSL JSON（或存量 shell 文本）
+     * @param dslJson     终值 DSL JSON
      */
     public static synchronized void cacheStartScript(String dockerId, long containerId, String dslJson) {
         if (!safeDockerId(dockerId) || StringUtils.isBlank(dslJson)) {
@@ -248,7 +256,7 @@ public final class ReadinessProber {
         }
         ENTRIES.put(dockerId, new ProbeEntry(containerId, spec, false, dslJson));
         persistEntry(dockerId, containerId, dslJson);
-        log.info("readiness probe registered (taskData), containerId={}, dockerId={}, type={}", containerId, dockerId, spec.getType());
+        log.info("readiness probe registered (taskData), containerId={}, dockerId={}, probes={}", containerId, dockerId, probeSummary(spec));
     }
 
     /**
@@ -269,7 +277,7 @@ public final class ReadinessProber {
             return;
         }
         ENTRIES.put(dockerId, new ProbeEntry(containerId, spec, true, labelJson));
-        log.info("readiness probe registered (label), containerId={}, dockerId={}, type={}", containerId, dockerId, spec.getType());
+        log.info("readiness probe registered (label), containerId={}, dockerId={}, probes={}", containerId, dockerId, probeSummary(spec));
     }
 
     /**
@@ -377,8 +385,7 @@ public final class ReadinessProber {
 
     /**
      * 启动时从落盘目录重建 taskData 路径条目（label 条目无需恢复，首轮 inventory 自然重建；
-     * 容器已消失的条目由首轮 inventory 对账清理）。
-     * 仅恢复名称与 dockerId 匹配的普通 JSON 文件；兼容旧格式（script 为纯 shell 文本→exec 包装）。
+     * 容器已消失的条目由首轮 inventory 对账清理）。仅恢复名称与 dockerId 匹配的普通 JSON 文件。
      */
     public static synchronized void restoreFromDisk() {
         File[] files = PROBE_STORE_DIR.toFile().listFiles();
@@ -578,23 +585,16 @@ public final class ReadinessProber {
     //==================== DSL 解析与执行器 ====================
 
     /**
-     * 终值 DSL 解析：JSON 对象且 type 合法 → ProbeSpec；非 JSON 文本（存量 shell）→ exec 包装；
-     * 其余 null（调用方决定跳过）。
+     * 终值 DSL 解析（多探测并存形态）：JSON 对象绑定 {@link ProbeSpec} 且
+     * tcpProbes/httpProbes/cmdProbes 任一非空即接受；空/非 JSON/损坏输入返回 null（调用方决定跳过）。
      */
     static ProbeSpec parseSpec(String json) {
-        if (StringUtils.isBlank(json)) {
+        if (StringUtils.isBlank(json) || !json.trim().startsWith("{")) {
             return null;
         }
-        String text = json.trim();
-        if (!text.startsWith("{")) {
-            ProbeSpec legacy = new ProbeSpec();
-            legacy.setType("exec");
-            legacy.setScript(text);
-            return legacy;
-        }
         try {
-            ProbeSpec spec = JsonUtils.parse(text, ProbeSpec.class);
-            if (spec != null && ("tcp".equals(spec.getType()) || "http".equals(spec.getType()) || "exec".equals(spec.getType()))) {
+            ProbeSpec spec = JsonUtils.parse(json, ProbeSpec.class);
+            if (spec != null && spec.probeCount() > 0) {
                 return spec;
             }
         } catch (Exception e) {
@@ -617,20 +617,51 @@ public final class ReadinessProber {
     }
 
     /**
-     * 原生执行分派：按 DSL 类型路由 tcp/http/exec 执行器（包私有：测试直连真实执行器组）。
+     * 原生执行分派：遍历三组探测全部执行，任一失败即返回其短码（AND 语义——全部通过才算
+     * 就绪；包私有：测试直连真实执行器组）。
      */
     static String runNative(ProbeSpec spec) {
-        return switch (spec.getType()) {
-            case "tcp" -> executeTcp(spec);
-            case "http" -> executeHttp(spec);
-            default -> executeExec(spec);
-        };
+        if (spec.getTcpProbes() != null) {
+            for (ProbeSpec.TcpProbe probe : spec.getTcpProbes()) {
+                String reason = executeTcp(probe);
+                if (reason != null) {
+                    return reason;
+                }
+            }
+        }
+        if (spec.getHttpProbes() != null) {
+            for (ProbeSpec.HttpProbe probe : spec.getHttpProbes()) {
+                String reason = executeHttp(probe);
+                if (reason != null) {
+                    return reason;
+                }
+            }
+        }
+        if (spec.getCmdProbes() != null) {
+            for (ProbeSpec.CmdProbe probe : spec.getCmdProbes()) {
+                String reason = executeCmd(probe);
+                if (reason != null) {
+                    return reason;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 探测组摘要（注册日志用）：tcp=N/http=M/cmd=K。
+     */
+    private static String probeSummary(ProbeSpec spec) {
+        int tcp = spec.getTcpProbes() == null ? 0 : spec.getTcpProbes().size();
+        int http = spec.getHttpProbes() == null ? 0 : spec.getHttpProbes().size();
+        int cmd = spec.getCmdProbes() == null ? 0 : spec.getCmdProbes().size();
+        return "tcp=" + tcp + "/http=" + http + "/cmd=" + cmd;
     }
 
     /**
      * tcp 探测：Socket connect（零进程）。null=成功；refused/timeout/error 短码=失败。
      */
-    private static String executeTcp(ProbeSpec spec) {
+    private static String executeTcp(ProbeSpec.TcpProbe spec) {
         String host = StringUtils.isBlank(spec.getHost()) ? "127.0.0.1" : spec.getHost();
         int timeout = spec.getTimeoutMs() != null ? spec.getTimeoutMs() : TCP_DEFAULT_TIMEOUT_MILLIS;
         try (Socket socket = new Socket()) {
@@ -646,10 +677,11 @@ public final class ReadinessProber {
     }
 
     /**
-     * http 探测：HttpURLConnection（零进程，直连不走代理）。null=成功（状态码命中 expect，默认 200）；
-     * http-status-N/refused/timeout/error 短码=失败。
+     * http 探测：HttpURLConnection（零进程，直连不走代理）。null=成功（状态码命中 expect
+     * 默认 200，且响应体含 expectBody 任一子串）；http-status-N/body-miss/refused/timeout/
+     * error 短码=失败。
      */
-    private static String executeHttp(ProbeSpec spec) {
+    private static String executeHttp(ProbeSpec.HttpProbe spec) {
         int timeout = spec.getTimeoutMs() != null ? spec.getTimeoutMs() : HTTP_DEFAULT_TIMEOUT_MILLIS;
         HttpURLConnection connection = null;
         try {
@@ -664,11 +696,29 @@ public final class ReadinessProber {
                 }
             }
             int code = connection.getResponseCode();
-            List<Integer> expect = spec.getExpect();
-            if (expect != null && !expect.isEmpty()) {
-                return expect.contains(code) ? null : shorten("http-status-" + code);
+            List<Integer> expectCode = spec.getExpectCode();
+            boolean statusOk = expectCode != null && !expectCode.isEmpty() ? expectCode.contains(code) : code >= 200 && code < 300;
+            if (!statusOk) {
+                return shorten("http-status-" + code);
             }
-            return code >= 200 && code < 300 ? null : shorten("http-status-" + code);
+            List<String> expectBody = spec.getExpectBody();
+            if (expectBody != null && !expectBody.isEmpty()) {
+                String body = readBody(connection);
+                if (body == null) {
+                    return "http-error";
+                }
+                boolean bodyHit = false;
+                for (String keyword : expectBody) {
+                    if (body.contains(keyword)) {
+                        bodyHit = true;
+                        break;
+                    }
+                }
+                if (!bodyHit) {
+                    return "http-body-miss";
+                }
+            }
+            return null;
         } catch (java.net.ConnectException e) {
             return "http-refused";
         } catch (java.net.SocketTimeoutException e) {
@@ -683,24 +733,56 @@ public final class ReadinessProber {
     }
 
     /**
-     * exec 探测：/bin/sh -c 脚本（默认 3s 超时；输出可能携带令牌，仅以退出码判定）。
-     * exec-exit-N=非零退出；exec-timeout/exec-error=超时/IO 异常。
+     * 响应体读取（expectBody 判定用；健康端点响应小，超限截断足够判定）。
      */
-    private static String executeExec(ProbeSpec spec) {
-        int timeout = spec.getTimeoutMs() != null ? spec.getTimeoutMs() : EXEC_DEFAULT_TIMEOUT_MILLIS;
+    private static String readBody(HttpURLConnection connection) {
+        try (java.io.InputStream in = connection.getInputStream()) {
+            byte[] buffer = new byte[8192];
+            StringBuilder text = new StringBuilder();
+            int read;
+            while ((read = in.read(buffer)) >= 0 && text.length() < HTTP_BODY_READ_LIMIT) {
+                text.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
+            }
+            return text.toString();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * cmd 探测：/bin/sh -c 脚本（默认 3s 超时）。退出码 0 且（可选）stdout 含 expectOutput
+     * 任一子串才算成功——输出仅内存判定子串，不落日志不上报（输出可能携带令牌的安全边界保留）。
+     * cmd-exit-N=非零退出；cmd-output-miss=码 0 但输出未命中；cmd-timeout/cmd-error=超时/IO 异常。
+     */
+    private static String executeCmd(ProbeSpec.CmdProbe spec) {
+        int timeout = spec.getTimeoutMs() != null ? spec.getTimeoutMs() : CMD_DEFAULT_TIMEOUT_MILLIS;
         try {
-            ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", spec.getScript()}, null, true, timeout);
+            List<String> output = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", spec.getScript()}, null, true, timeout);
+            List<String> expectOutput = spec.getExpectOutput();
+            if (expectOutput != null && !expectOutput.isEmpty()) {
+                String text = String.join("\n", output);
+                boolean hit = false;
+                for (String keyword : expectOutput) {
+                    if (text.contains(keyword)) {
+                        hit = true;
+                        break;
+                    }
+                }
+                if (!hit) {
+                    return "cmd-output-miss";
+                }
+            }
             return null;
         } catch (ShellCmdUtils.CommandException e) {
             String message = e.getMessage() == null ? "" : e.getMessage();
             if (message.contains("timed out")) {
-                return "exec-timeout";
+                return "cmd-timeout";
             }
             java.util.regex.Matcher matcher = EXEC_EXIT_CODE.matcher(message);
             if (matcher.find()) {
-                return shorten("exec-exit-" + matcher.group(1));
+                return shorten("cmd-exit-" + matcher.group(1));
             }
-            return "exec-error";
+            return "cmd-error";
         }
     }
 

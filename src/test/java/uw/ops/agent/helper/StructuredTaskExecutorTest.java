@@ -35,7 +35,7 @@ class StructuredTaskExecutorTest {
 
     @Test
     void failedStopKeepsProbeForStillRunningContainer() {
-        ReadinessProber.cacheStartScript("hash01", 123, "exit 0");
+        ReadinessProber.cacheStartScript("hash01", 123, "{\"cmdProbes\":[{\"script\":\"exit 0\"}]}");
         daemon.setResponder(request -> {
             if (request.startsWith("GET /containers/hash01/json")) {
                 return FakeDockerDaemon.jsonResponse(200, FakeDockerDaemon.inspectBody(
