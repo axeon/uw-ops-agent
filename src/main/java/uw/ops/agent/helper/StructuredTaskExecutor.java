@@ -18,6 +18,11 @@ import uw.ops.agent.vo.TaskData;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Set;
+import java.util.HashSet;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -204,6 +209,11 @@ public final class StructuredTaskExecutor {
         log.info("structured start creating, taskId={}, containerId={}",
                 opsTask.getId(), opsTask.getContainerId());
         CreateContainerRaw created = DockerInfoHelper.createContainer(containerName, param);
+        //5.5 部署文件落盘（create 后、start 前）：载荷按容器路径声明，反查 mounts 宿主源落盘
+        //（bind 直通，容器内实时可见；无匹配挂载=载荷错误 fail）；start 在写文件之后——
+        //"服务先于文件启动"的窗口结构上不存在，写失败不 start（fail-closed）。幂等命中分支
+        //（已 running）不落盘——文件变化随下次重建生效。
+        writeProvisionFiles(docker);
         DockerInfoHelper.startContainer(created.getId());
         //6.轮询等待 running（间隔 2s，总预算与任务超时一致）。
         waitRunning(created.getId());
@@ -211,6 +221,116 @@ public final class StructuredTaskExecutor {
         finishStart(opsTask, docker, created.getId());
         log.info("structured start finished, taskId={}, containerId={}, dockerId={}",
                 opsTask.getId(), opsTask.getContainerId(), created.getId());
+    }
+
+    /**
+     * 部署文件落盘（create 后、start 前）：载荷以<b>容器内路径</b>声明目标文件，agent 按本任务
+     * create 参数 mounts（bind 串 hostSrc:containerDst）反查宿主源——name 必须落在
+     * 某挂载点内（路径边界匹配，多挂载点嵌套取最长前缀），写宿主源即容器内实时可见（bind
+     * 直通）。无匹配挂载点=载荷错误，fail-closed 立即失败（写宿主裸路径对容器不可见）。
+     * start 在写文件之后——服务进程不可能先于文件启动；写失败不 start，残留的已创建容器由
+     * 下次重放的幂等清理收敛。幂等：同值重写无害。
+     */
+    private static void writeProvisionFiles(TaskData.ContainerSection docker) throws Exception {
+        if (docker.getFiles() == null || docker.getFiles().isEmpty()) {
+            return;
+        }
+        try {
+            for (TaskData.ContainerSection.ProvisionFile file : docker.getFiles()) {
+                Path path = Paths.get(resolveHostPath(docker, file.getName()));
+                Files.writeString(path, file.getContent() == null ? "" : file.getContent(),
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+                //权限位：八进制 int（下发侧 0600/0644 字面量）→ POSIX 权限集
+                Files.setPosixFilePermissions(path,
+                        posixPermissions(file.getMode() == null ? 0644 : file.getMode()));
+                //属主（容器内运行用户读文件；uid/gid 下发，避免镜像内用户名解析依赖）
+                if (file.getUid() != null) {
+                    Files.setAttribute(path, "unix:uid", file.getUid());
+                    Files.setAttribute(path, "unix:gid", file.getGid() == null ? file.getUid() : file.getGid());
+                }
+            }
+        } catch (Exception e) {
+            log.error("provision files write failed, err={}", e.toString());
+            throw new TaskExecutionException("provision files write failed.");
+        }
+    }
+
+    /**
+     * 容器路径 → 宿主源路径（bind 反查）：在 create 参数 mounts（hostSrc:containerDst[:opts]）
+     * 中找包含 name 的挂载点——路径边界匹配（相等或以 dst+"/" 开头，防 /a 匹配
+     * /a.b 的段误配），多挂载点嵌套取最长 dst 前缀（/data 与 /data/sub 并存时精确命中）。
+     * 目录父级由 Files 的写入兜底创建（挂载点自身已由 daemon 随 create 建立）。
+     *
+     * @throws TaskExecutionException name 不在任何挂载点内（载荷错误，fail-closed）
+     */
+    static String resolveHostPath(TaskData.ContainerSection docker, String name) throws TaskExecutionException {
+        String bestSrc = null;
+        int bestLen = -1;
+        if (docker.getMounts() != null && name != null && !name.isBlank()) {
+            for (String bind : docker.getMounts()) {
+                //bind 形态 hostSrc:containerDst[:opts]（Linux 路径无盘符冒号，首个 ':' 为分割）
+                int sep = bind.indexOf(':');
+                if (sep <= 0) {
+                    continue;
+                }
+                String src = bind.substring(0, sep);
+                String rest = bind.substring(sep + 1);
+                int sep2 = rest.indexOf(':');
+                String dst = sep2 >= 0 ? rest.substring(0, sep2) : rest;
+                if (!dst.startsWith("/")) {
+                    continue;
+                }
+                //路径边界匹配：相等或以 dst+"/" 开头
+                if (name.equals(dst) || name.startsWith(dst + "/")) {
+                    if (dst.length() > bestLen) {
+                        bestLen = dst.length();
+                        bestSrc = src + name.substring(dst.length());
+                    }
+                }
+            }
+        }
+        if (bestSrc == null) {
+            log.error("provision file name[{}] matches no mount point, mounts={}",
+                    name, docker.getMounts());
+            throw new TaskExecutionException("provision file path matches no mount.");
+        }
+        return bestSrc;
+    }
+
+    /**
+     * 八进制权限位（如 0644）→ POSIX 权限集。位判定显式命名，规避 "%o" 字符串约定的隐晦
+     * （跨进程序列化后 0600=384，曾经因直接十进制传 chmod 咬过一次 bug——此处按位拆解）。
+     */
+    public static Set<PosixFilePermission> posixPermissions(int mode) {
+        Set<PosixFilePermission> perms = new HashSet<>();
+        if ((mode & 0400) != 0) {
+            perms.add(PosixFilePermission.OWNER_READ);
+        }
+        if ((mode & 0200) != 0) {
+            perms.add(PosixFilePermission.OWNER_WRITE);
+        }
+        if ((mode & 0100) != 0) {
+            perms.add(PosixFilePermission.OWNER_EXECUTE);
+        }
+        if ((mode & 0040) != 0) {
+            perms.add(PosixFilePermission.GROUP_READ);
+        }
+        if ((mode & 0020) != 0) {
+            perms.add(PosixFilePermission.GROUP_WRITE);
+        }
+        if ((mode & 0010) != 0) {
+            perms.add(PosixFilePermission.GROUP_EXECUTE);
+        }
+        if ((mode & 0004) != 0) {
+            perms.add(PosixFilePermission.OTHERS_READ);
+        }
+        if ((mode & 0002) != 0) {
+            perms.add(PosixFilePermission.OTHERS_WRITE);
+        }
+        if ((mode & 0001) != 0) {
+            perms.add(PosixFilePermission.OTHERS_EXECUTE);
+        }
+        return perms;
     }
 
     /**

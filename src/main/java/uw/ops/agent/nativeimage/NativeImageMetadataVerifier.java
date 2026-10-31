@@ -18,6 +18,7 @@ import uw.ops.agent.util.ShellCmdUtils;
 import uw.ops.agent.vo.HostStats;
 import uw.ops.agent.vo.HostInfo;
 import uw.ops.agent.vo.OpsTask;
+import uw.ops.agent.helper.StructuredTaskExecutor;
 import uw.ops.agent.vo.TaskData;
 import uw.ops.agent.vo.ProbeScriptEntry;
 import uw.ops.agent.vo.ProbeSpec;
@@ -343,6 +344,7 @@ public final class NativeImageMetadataVerifier {
         TaskData.ShellSection shellSection = new TaskData.ShellSection();
         shellSection.setScript("echo ${APP_PORT}");
         shellSection.setPorts(Map.of("APP_PORT", "10010"));
+        shellSection.setTimeoutSec(14400);
         sample.setShell(shellSection);
         TaskData.ContainerSection dockerSection = new TaskData.ContainerSection();
         dockerSection.setAction("start");
@@ -359,6 +361,15 @@ public final class NativeImageMetadataVerifier {
         dockerSection.setExtra(JsonUtils.parse("{\"CapAdd\":[\"NET_ADMIN\"],\"Sysctls\":{}}", JsonNode.class));
         dockerSection.setProbeTaskData("curl -sf -m 2 http://127.0.0.1:10010/ready || exit 1");
         dockerSection.setProfileCode("dev");
+        //部署文件段（create 后 start 前落盘载荷）：ProvisionFile 绑定路径覆盖（嵌套类随 vo 包
+        //递归注册反射——本验证走通其序列化/反序列化，防"JVM 可跑、native 缺元数据"）
+        TaskData.ContainerSection.ProvisionFile provisionFile = new TaskData.ContainerSection.ProvisionFile();
+        provisionFile.setName("/etc/mysql/conf.d/uw-tuning.cnf");
+        provisionFile.setContent("[mysqld]\nmax_connections=1000\n");
+        provisionFile.setMode(0644);
+        provisionFile.setUid(999);
+        provisionFile.setGid(999);
+        dockerSection.setFiles(List.of(provisionFile));
         sample.setContainer(dockerSection);
         TaskData roundTrip = JsonUtils.parse(JsonUtils.toString(sample), TaskData.class);
         require(roundTrip.isSensitiveOutput() && roundTrip.getSecretKeys().equals(List.of("DB_SECRET")) && "DOCKER".equals(roundTrip.getExecType()) && "start".equals(roundTrip.getContainer().getAction())
@@ -366,8 +377,33 @@ public final class NativeImageMetadataVerifier {
                 && roundTrip.getContainer().getHostPorts().get("APP_PORT") == 10010
                 && roundTrip.getContainer().getEnv().contains("TZ=Asia/Shanghai")
                 && roundTrip.getShell().getPorts().get("APP_PORT").equals("10010")
-                && "NET_ADMIN".equals(roundTrip.getContainer().getExtra().path("CapAdd").get(0).asString()),
+                && "NET_ADMIN".equals(roundTrip.getContainer().getExtra().path("CapAdd").get(0).asString())
+                && roundTrip.getShell().getTimeoutSec() == 14400
+                && roundTrip.getContainer().getFiles().size() == 1
+                && "/etc/mysql/conf.d/uw-tuning.cnf".equals(roundTrip.getContainer().getFiles().get(0).getName())
+                && roundTrip.getContainer().getFiles().get(0).getMode() == 0644
+                && roundTrip.getContainer().getFiles().get(0).getUid() == 999,
                 "TaskData round-trip deserialization");
+        //部署文件落盘路径（NIO POSIX 属性）：JDK 替代库对 unix:* 扩展属性视图的支持在
+        //native 下是独立风险面——写临时文件+权限位+属主设置逐一走通（权限类 IOException
+        //（非 root 设 uid 被拒）不视为元数据缺失，UnsupportedOperation/ClassNotFound 才是）。
+        try {
+            java.nio.file.Path probe = java.nio.file.Files.createTempFile("uw-native-probe", ".cnf");
+            java.nio.file.Files.writeString(probe, "probe");
+            java.nio.file.Files.setPosixFilePermissions(probe,
+                    StructuredTaskExecutor.posixPermissions(0600));
+            try {
+                java.nio.file.Files.setAttribute(probe, "unix:uid", 999);
+                java.nio.file.Files.setAttribute(probe, "unix:gid", 999);
+            } catch (java.io.IOException permissionDenied) {
+                //非 root 场景属主设置被拒属预期——视图类可用即通过
+            }
+            java.nio.file.Files.deleteIfExists(probe);
+        } catch (java.io.IOException io) {
+            throw new IllegalStateException("posix file attribute path io failure: " + io);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("posix file attribute path unavailable: " + e);
+        }
 
         //结构化任务写操作 vo：create 请求体出站序列化（PascalCase + null 省略）与 daemon 响应入站绑定。
         CreateContainerParam createParam = new CreateContainerParam();

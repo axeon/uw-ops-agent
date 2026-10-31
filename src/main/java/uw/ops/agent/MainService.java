@@ -635,7 +635,11 @@ public class MainService {
             opsTask.setState(TaskState.STARTING.getValue());
             runTaskScript(opsTask, script, UPGRADE_TIMEOUT_MILLIS);
         } else {
-            runTaskScript(opsTask, script);
+            //载荷超时分级（长任务——备份/恢复类——由下发侧声明；null=默认 600s）
+            long timeoutMillis = taskData.getShell() != null && taskData.getShell().getTimeoutSec() != null
+                    && taskData.getShell().getTimeoutSec() > 0
+                    ? taskData.getShell().getTimeoutSec() * 1000L : TASK_TIMEOUT_MILLIS;
+            runTaskScript(opsTask, script, timeoutMillis);
         }
     }
 

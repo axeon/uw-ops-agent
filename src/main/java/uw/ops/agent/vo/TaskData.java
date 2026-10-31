@@ -116,12 +116,25 @@ public class TaskData {
          */
         private Map<String, String> ports;
 
+        /**
+         * 执行超时秒（长任务分级上限由调度方按任务性质下发；null=默认 600s）。
+         */
+        private Integer timeoutSec;
+
         public String getScript() {
             return script;
         }
 
         public void setScript(String script) {
             this.script = script;
+        }
+
+        public Integer getTimeoutSec() {
+            return timeoutSec;
+        }
+
+        public void setTimeoutSec(Integer timeoutSec) {
+            this.timeoutSec = timeoutSec;
         }
 
         public Map<String, String> getPorts() {
@@ -224,6 +237,85 @@ public class TaskData {
          * 递增偏移并改写为实际值，actualPorts 回传实际使用端口（center 台账比对不符告警）。
          */
         private Map<String, Integer> hostPorts;
+
+        /**
+         * DOCKER create 前宿主落盘文件段（bind 挂载源；落盘失败 fail-closed 中止任务——
+         * 防目录挂载源缺失时 daemon 自动建空目录导致服务以默认配置静默启动）。
+         */
+        private List<ProvisionFile> files;
+
+        /**
+         * create 前宿主落盘文件（bind 挂载源）。
+         */
+        public static class ProvisionFile {
+
+            /**
+             * 容器内绝对路径（如 /etc/mysql/conf.d/uw-tuning.cnf）——必须落在本任务 mounts
+             * 声明的某挂载点内（agent 按 create 参数反查宿主源落盘；无匹配挂载=载荷错误，
+             * fail-closed 立即暴露：写宿主裸路径对容器不可见）。
+             */
+            private String name;
+
+            /**
+             * 文件内容（全量静态生成）。
+             */
+            private String content;
+
+            /**
+             * 权限位（如 0600；null=默认）。
+             */
+            private Integer mode;
+
+            /**
+             * 属主 uid（null=默认）。
+             */
+            private Integer uid;
+
+            /**
+             * 属主 gid（null=默认）。
+             */
+            private Integer gid;
+
+            public String getName() {
+                return name;
+            }
+
+            public void setName(String name) {
+                this.name = name;
+            }
+
+            public String getContent() {
+                return content;
+            }
+
+            public void setContent(String content) {
+                this.content = content;
+            }
+
+            public Integer getMode() {
+                return mode;
+            }
+
+            public void setMode(Integer mode) {
+                this.mode = mode;
+            }
+
+            public Integer getUid() {
+                return uid;
+            }
+
+            public void setUid(Integer uid) {
+                this.uid = uid;
+            }
+
+            public Integer getGid() {
+                return gid;
+            }
+
+            public void setGid(Integer gid) {
+                this.gid = gid;
+            }
+        }
 
         /**
          * 容器内存上限，单位 MB。
@@ -390,6 +482,14 @@ public class TaskData {
 
         public void setLogMaxFile(String logMaxFile) {
             this.logMaxFile = logMaxFile;
+        }
+
+        public List<ProvisionFile> getFiles() {
+            return files;
+        }
+
+        public void setFiles(List<ProvisionFile> files) {
+            this.files = files;
         }
 
         public Map<String, Integer> getHostPorts() {
