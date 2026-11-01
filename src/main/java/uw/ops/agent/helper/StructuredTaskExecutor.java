@@ -238,6 +238,9 @@ public final class StructuredTaskExecutor {
         try {
             for (TaskData.ContainerSection.ProvisionFile file : docker.getFiles()) {
                 Path path = Paths.get(resolveHostPath(docker, file.getName()));
+                //宿主源目录防御性创建（幂等）：daemon 对 Binds 缺失源目录在 create 时不建
+                //（Docker 29 实测：start 时建或报错——本时序 create 后 start 前写文件，目录必缺）
+                Files.createDirectories(path.getParent());
                 Files.writeString(path, file.getContent() == null ? "" : file.getContent(),
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
                 //权限位：八进制 int（下发侧 0600/0644 字面量）→ POSIX 权限集
