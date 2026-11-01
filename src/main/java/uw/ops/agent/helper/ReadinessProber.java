@@ -757,7 +757,8 @@ public final class ReadinessProber {
     private static String executeCmd(ProbeSpec.CmdProbe spec) {
         int timeout = spec.getTimeoutMs() != null ? spec.getTimeoutMs() : CMD_DEFAULT_TIMEOUT_MILLIS;
         try {
-            List<String> output = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", spec.getScript()}, null, true, timeout);
+            //bash 方言（与 SHELL 任务执行器同栈——center 下发脚本统一 bash）
+            List<String> output = ShellCmdUtils.runNative(new String[]{"/bin/bash", "-c", spec.getScript()}, null, true, timeout);
             List<String> expectOutput = spec.getExpectOutput();
             if (expectOutput != null && !expectOutput.isEmpty()) {
                 String text = String.join("\n", output);

@@ -533,7 +533,9 @@ public class MainService {
      */
     private static void runTaskScript(OpsTask opsTask, String script, long timeoutMillis) {
         log.info("Shell command execute, taskId={}", opsTask.getId());
-        List<String> cmdlist = ShellCmdUtils.runNative(new String[]{"/bin/sh", "-c", script}, null, true, timeoutMillis);
+        //bash 方言执行（center 下发的宿主脚本使用 set -o pipefail、/dev/tcp 等 bashism——
+        //debian 系 /bin/sh=dash 必败，统一经 /bin/bash 执行）
+        List<String> cmdlist = ShellCmdUtils.runNative(new String[]{"/bin/bash", "-c", script}, null, true, timeoutMillis);
         opsTask.setTaskResult(opsTask.getTaskData().isSensitiveOutput()
                 ? TaskData.SENSITIVE_RESULT_WITHHELD : StringUtils.join(cmdlist, "\n"));
         log.info("Shell command finished, taskId={}", opsTask.getId());
@@ -597,7 +599,7 @@ public class MainService {
      * 不靠 taskType 推断也不靠字段存在与否隐式判别）：
      * <ul>
      *   <li>DOCKER → {@link StructuredTaskExecutor}（结构化唯一通道，无 shell 回退）；</li>
-     *   <li>SHELL → shell 执行器（/bin/sh -c + ShellRiskChecker）；Center 已完成端口和秘密替换，
+     *   <li>SHELL → shell 执行器（/bin/bash -c + ShellRiskChecker，宿主脚本为 bash 方言）；Center 已完成端口和秘密替换，
      *       Agent 不再次解释模板或改写已分配端口；升级任务同走此路径；</li>
      *   <li>缺失/未知 execType → 拒绝执行（任务 FAILED，不静默走 shell）。</li>
      * </ul>
@@ -620,7 +622,7 @@ public class MainService {
         TaskData.ShellSection shell = taskData.getShell();
         String script = shell == null ? null : shell.getScript();
         if (StringUtils.isEmpty(script)) {
-            //SHELL 载荷缺脚本属协议错误：显式拒绝，避免 /bin/sh -c null 的晦默 NPE。
+            //SHELL 载荷缺脚本属协议错误：显式拒绝，避免 /bin/bash -c null 的晦默 NPE。
             throw new IllegalArgumentException("taskData.shell.script missing.");
         }
         //危险命令检查（作用于Center下发的最终脚本）。

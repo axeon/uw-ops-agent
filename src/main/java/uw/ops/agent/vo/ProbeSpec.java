@@ -11,7 +11,7 @@ import java.util.Map;
  * 两种到达路径：仅 tcp/http（无 secret）经容器 label {@code uw.ops.probe}（create 携带、
  * inventory 收敛，Docker 元数据即持久化真相源，agent 重启后零恢复动作）；含 cmd（或含
  * secret 占位符的 tcp/http）经 START taskData（docker.probeConfig）下发并落盘。
- * tcp=http=JVM 原生探测（零进程 spawn、毫秒级），cmd=/bin/sh 进程（默认 3s 超时）。
+ * tcp=http=JVM 原生探测（零进程 spawn、毫秒级），cmd=/bin/bash 进程（默认 3s 超时，bash 方言）。
  */
 public class ProbeSpec {
 
@@ -26,7 +26,7 @@ public class ProbeSpec {
     private List<HttpProbe> httpProbes;
 
     /**
-     * cmd 探测组（可多条；/bin/sh 脚本，默认 3s 超时）。
+     * cmd 探测组（可多条；/bin/bash 脚本，默认 3s 超时）。
      */
     private List<CmdProbe> cmdProbes;
 
@@ -189,7 +189,7 @@ public class ProbeSpec {
     }
 
     /**
-     * cmd 脚本探测（/bin/sh 进程，默认超时 3000ms；退出码 0 且可选 expectOutput 输出子串命中才算成功）。
+     * cmd 脚本探测（/bin/bash 进程，默认超时 3000ms；退出码 0 且可选 expectOutput 输出子串命中才算成功）。
      */
     public static class CmdProbe {
 

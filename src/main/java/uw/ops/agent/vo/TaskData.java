@@ -182,6 +182,11 @@ public class TaskData {
         private List<String> mounts;
 
         /**
+         * 启动命令（docker Cmd；空=镜像默认 ENTRYPOINT/CMD）。
+         */
+        private List<String> cmd;
+
+        /**
          * Docker 网络模式（如 bridge / host）。
          */
         private String networkMode;
@@ -195,6 +200,11 @@ public class TaskData {
          * 运行身份（Config.User 终值）。
          */
         private String user;
+
+        /**
+         * 容器主机名（缺省=容器名：host 网络下 erlang 长名等以容器名为节点名的服务依赖此对齐）。
+         */
+        private String hostname;
 
         /**
          * 特权模式（全能力开关；单能力走 extra CapAdd）。
@@ -400,6 +410,14 @@ public class TaskData {
             return mounts;
         }
 
+        public List<String> getCmd() {
+            return cmd;
+        }
+
+        public void setCmd(List<String> cmd) {
+            this.cmd = cmd;
+        }
+
         public void setMounts(List<String> mounts) {
             this.mounts = mounts;
         }
@@ -422,6 +440,14 @@ public class TaskData {
 
         public String getUser() {
             return user;
+        }
+
+        public String getHostname() {
+            return hostname;
+        }
+
+        public void setHostname(String hostname) {
+            this.hostname = hostname;
         }
 
         public void setUser(String user) {

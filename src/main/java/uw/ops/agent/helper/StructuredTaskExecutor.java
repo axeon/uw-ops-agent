@@ -516,6 +516,11 @@ public final class StructuredTaskExecutor {
         if (StringUtils.isNotBlank(docker.getUser())) {
             param.setUser(docker.getUser());
         }
+        if (docker.getCmd() != null && !docker.getCmd().isEmpty()) {
+            param.setCmd(docker.getCmd());
+        }
+        //hostname 缺省=容器名（host 网络下容器名与主机名对齐：erlang 长名等以容器名为节点名的服务依赖）
+        param.setHostname(StringUtils.defaultIfBlank(docker.getHostname(), docker.getContainerName()));
         param.setLabels(labels);
         param.setHostConfig(buildHostConfig(docker));
         return param;

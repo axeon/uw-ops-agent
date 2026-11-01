@@ -261,7 +261,7 @@ public final class NativeImageMetadataVerifier {
      */
     private static void verifyShellExecution() {
         List<String> output = ShellCmdUtils.runNative(
-                new String[]{"/bin/sh", "-c", "printf 'native-shell\\n'"}, null, true, 5_000);
+                new String[]{"/bin/bash", "-c", "printf 'native-shell\\n'"}, null, true, 5_000);
         require(output.equals(List.of("native-shell")), "shell execution");
     }
 
