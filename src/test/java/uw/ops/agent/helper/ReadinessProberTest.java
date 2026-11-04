@@ -155,14 +155,14 @@ class ReadinessProberTest {
         ContainerInfo fail1 = summaryOf("agg");
         Assertions.assertEquals(ReadinessProber.STATE_FAILED, fail1.getProbeState());
         Assertions.assertEquals(1, fail1.getProbeSeq());
-        Assertions.assertEquals(1, fail1.getProbeFails());
+        Assertions.assertEquals(1, fail1.getProbeFailNum());
         Assertions.assertEquals("tcp-refused", fail1.getProbeReason());
         Assertions.assertEquals(0L, fail1.getProbeSuccessMs());
 
         ReadinessProber.expireForTest();
         ReadinessProber.probeOnce();
         ContainerInfo fail2 = summaryOf("agg");
-        Assertions.assertEquals(2, fail2.getProbeFails());
+        Assertions.assertEquals(2, fail2.getProbeFailNum());
         Assertions.assertEquals(2, fail2.getProbeSeq());
 
         //成功：fails 清零、streak 起步（首个成功样本 streak=0）、reason 保留供排障。
@@ -171,7 +171,7 @@ class ReadinessProberTest {
         ReadinessProber.probeOnce();
         ContainerInfo ok1 = summaryOf("agg");
         Assertions.assertEquals(ReadinessProber.STATE_SUCCESS, ok1.getProbeState());
-        Assertions.assertEquals(0, ok1.getProbeFails());
+        Assertions.assertEquals(0, ok1.getProbeFailNum());
         Assertions.assertEquals(0L, ok1.getProbeSuccessMs());
         Assertions.assertEquals("tcp-refused", ok1.getProbeReason(), "last reason kept for debugging");
     }
@@ -323,14 +323,14 @@ class ReadinessProberTest {
         info.setProbeState(1);
         info.setProbeSeq(42L);
         info.setProbeDate(1700000000000L);
-        info.setProbeFails(0);
+        info.setProbeFailNum(0);
         info.setProbeSuccessMs(90000L);
         info.setProbeReason("tcp-refused");
         String jsonWith = JsonUtils.toString(info);
         Assertions.assertTrue(jsonWith.contains("\"probeState\":1"));
         Assertions.assertTrue(jsonWith.contains("\"probeSeq\":42"));
         Assertions.assertTrue(jsonWith.contains("\"probeDate\":1700000000000"));
-        Assertions.assertTrue(jsonWith.contains("\"probeFails\":0"));
+        Assertions.assertTrue(jsonWith.contains("\"probeFailNum\":0"));
         Assertions.assertTrue(jsonWith.contains("\"probeSuccessMs\":90000"));
         Assertions.assertTrue(jsonWith.contains("\"probeReason\":\"tcp-refused\""));
     }

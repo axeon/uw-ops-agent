@@ -94,7 +94,7 @@ public class ContainerInfo {
      * 连续失败次数（agent 本地聚合的无判断事实；Center 据此分级标记 NOT_READY）。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private Integer probeFails;
+    private Integer probeFailNum;
 
     /**
      * 连续成功毫秒数（agent 本地聚合；Center 发布门禁直接与 minReadySeconds 比较，
@@ -214,12 +214,12 @@ public class ContainerInfo {
         this.probeDate = probeDate;
     }
 
-    public Integer getProbeFails() {
-        return probeFails;
+    public Integer getProbeFailNum() {
+        return probeFailNum;
     }
 
-    public void setProbeFails(Integer probeFails) {
-        this.probeFails = probeFails;
+    public void setProbeFailNum(Integer probeFailNum) {
+        this.probeFailNum = probeFailNum;
     }
 
     public Long getProbeSuccessMs() {
