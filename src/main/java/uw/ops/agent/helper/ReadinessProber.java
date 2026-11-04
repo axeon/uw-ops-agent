@@ -55,7 +55,7 @@ import java.util.TreeMap;
  * <p>
  * <b>聚合与上报：</b>agent 只做无判断计数（seq 单调、连续失败数、连续成功毫秒数、失败原因
  * 短码），每容器一个摘要随 60s 主轮上报（{@link ContainerInfo} probeState/probeSeq/probeDate/
- * probeFails/probeStreak/probeReason）。判定阈值与动作（门禁/NOT_READY/替换分级）全部在
+ * probeFails/probeSuccessMs/probeReason）。判定阈值与动作（门禁/NOT_READY/替换分级）全部在
  * Center——Agent 不做本地自治决策，Center 失联期间照常探测、期望未变的实例保持现状。
  * <p>
  * 安全边界：label/taskData 均为 center 受信内容（终值 DSL），不经过 ShellRiskChecker
@@ -552,7 +552,7 @@ public final class ReadinessProber {
             container.setProbeState(entry.lastState);
             container.setProbeDate(entry.lastProbeWallClock > 0 ? entry.lastProbeWallClock : null);
             container.setProbeFails(entry.probeFailCount);
-            container.setProbeStreak(entry.lastState == STATE_SUCCESS ? entry.streakMillis : 0L);
+            container.setProbeSuccessMs(entry.lastState == STATE_SUCCESS ? entry.streakMillis : 0L);
             container.setProbeReason(entry.lastReason);
         }
     }

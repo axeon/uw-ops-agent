@@ -101,7 +101,7 @@ public class ContainerInfo {
      * 精度=探测粒度而非上报粒度）。
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private Long probeStreak;
+    private Long probeSuccessMs;
 
     /**
      * 最近失败原因短码（tcp-refused/tcp-timeout/http-status-503/exec-exit-3 等，≤32字符；成功后保留上一失败原因供排障）。
@@ -222,12 +222,12 @@ public class ContainerInfo {
         this.probeFails = probeFails;
     }
 
-    public Long getProbeStreak() {
-        return probeStreak;
+    public Long getProbeSuccessMs() {
+        return probeSuccessMs;
     }
 
-    public void setProbeStreak(Long probeStreak) {
-        this.probeStreak = probeStreak;
+    public void setProbeSuccessMs(Long probeSuccessMs) {
+        this.probeSuccessMs = probeSuccessMs;
     }
 
     public String getProbeReason() {

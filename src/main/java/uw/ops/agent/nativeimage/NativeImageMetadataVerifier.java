@@ -286,12 +286,12 @@ public final class NativeImageMetadataVerifier {
         sampleInfo.setId("sample-hash");
         sampleInfo.setStatsList(List.of(new ContainerInfo.Stats()));
         sampleInfo.setEventList(List.of(new ContainerInfo.Event()));
-        //就绪探测摘要字段：probeState/probeSeq/probeDate/probeFails/probeStreak/probeReason 随窗上报（camelCase），null 时省略。
+        //就绪探测摘要字段：probeState/probeSeq/probeDate/probeFails/probeSuccessMs/probeReason 随窗上报（camelCase），null 时省略。
         sampleInfo.setProbeState(1);
         sampleInfo.setProbeSeq(42L);
         sampleInfo.setProbeDate(1700000000000L);
         sampleInfo.setProbeFails(0);
-        sampleInfo.setProbeStreak(90000L);
+        sampleInfo.setProbeSuccessMs(90000L);
         sampleInfo.setProbeReason("tcp-refused");
         hostStats.setContainerInfoList(List.of(sampleInfo));
         String hostStatsJson = JsonUtils.toString(hostStats);
@@ -299,7 +299,7 @@ public final class NativeImageMetadataVerifier {
                 && hostStatsJson.contains("\"eventList\"") && hostStatsJson.contains("\"statsDate\"")
                 && hostStatsJson.contains("\"probeState\"") && hostStatsJson.contains("\"probeSeq\"")
                 && hostStatsJson.contains("\"probeDate\"") && hostStatsJson.contains("\"probeFails\"")
-                && hostStatsJson.contains("\"probeStreak\"") && hostStatsJson.contains("\"probeReason\""), "HostStats serialization");
+                && hostStatsJson.contains("\"probeSuccessMs\"") && hostStatsJson.contains("\"probeReason\""), "HostStats serialization");
 
         //inventory 输入 vo：PascalCase 字段与嵌套 HostConfig。
         ContainerSummaryRaw[] summaries = JsonUtils.parse("""
