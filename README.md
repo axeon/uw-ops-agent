@@ -10,7 +10,6 @@
 - **60 秒窗口聚合**上报宿主机运行统计与全量容器指标（CPU/内存/负载/网络/磁盘 IO/容器 CPU 限流占比），均值/速率/占比全部在 Agent 端算好再上报
 - 通过本机容器运行时 Engine API（UDS 直连，docker/podman 自动探测，无 CLI、无 docker-java、不暴露 TCP）采集**全部容器**（含手工/第三方容器与 exited 容器）
 - 每 10 秒领取一次待执行任务（单线程循环领取，单条 CAS 协议），提交执行池**并发执行**（并发度可配置，默认 4），各任务独立上报结果
-- 支持 Agent 自升级任务（只在执行池完全空闲时独占执行；下载新版本上报成功后优雅退出，由 systemd 拉起新进程）
 
 ## 采集模型（两点差分架构）
 
@@ -21,8 +20,8 @@
 | `StatsReportTask`（主轮） | **60 秒恒定激发（`scheduleAtFixedRate`）** | 一次执行完成：inventory（`GET /containers/json?all=1` 全量）→ running 容器 stats（差分第二点，并发 8、12s 预算）→ Host 边界采集（同刻 δ=0）→ 差分与事件合并组包 → 上报；初始延迟随机打散 0~59s |
 | `DockerEventTask` | 10 秒 | 容器事件窗口采集（`GET /events?since&until` 单请求，全量容器事件）；高密度拉取对抗 daemon journal 环形缓冲（64 条硬编码、丢失不可检测）被冲刷：10s 间隔安全阈值 6.4 条/s（≈10 个并发 crash-loop 容器），批量脚本启停 50+ 条/s 属架构级限制防不住；独立调度错开相位，失败跳轮下轮无缝续拉；事件随主轮 payload 一起发送，不搭独立请求 |
 | `UploadHostInfoTask` | 1 小时 | 主机静态信息 |
-| `ProcessOpsTask` | 10 秒 | 任务领取轮（无 secret 时跳过）：**唯一的领取者**（单条 CAS 领取通道不变，串行领取天然安全），池空时进入"循环领取"连续领满空闲执行槽后提交任务执行池；池非空时本轮不领（升级任务门禁，见下）；各任务在执行池内独立执行、独立上报 |
-| `ReadinessProbeTask` | **5 秒 tick（`scheduleWithFixedDelay` 防重入；条目按 nextProbeAt 到期执行：启动期 5s 密集探测、首次成功回落稳态 15s）** | 就绪探测循环（DSL 摘要模型）：**多探测并存——tcpProbes/httpProbes/cmdProbes 三组数组同时生效（同类多条、跨类并存），单轮遍历全部执行，任一失败即判定失败（AND 语义），失败短码取首个失败探测**。配置双路径——**仅 tcp/http 的终值 DSL 经容器 label `uw.ops.probe` 声明式下发**（create 携带 + 主轮 inventory 收敛：label 在=配置在/值变=条目重建/容器删=条目消失，Docker 元数据即持久化真相源，agent 重启零恢复、改探针无需重部署）；**含 cmd（或含 secret 占位符的 tcp/http）经 START taskData 下发并落盘** `/etc/uw-ops-agent/probe/`（重启 `restoreFromDisk()` 重建）。执行器：tcp=JVM Socket connect、http=原生 HTTP 客户端（`expectCode` 期望码+可选 `expectBody` 响应体子串判定，读体限 64KB，均零进程 spawn、毫秒级），cmd=`/bin/sh -c` 默认 3s 超时（退出码 0 且可选 `expectOutput` 输出子串命中才算成功——输出仅内存判定，不落日志不上报）。agent 只做无判断聚合：每容器摘要 {probeSeq 单调, probeState 0/1/2, probeDate, probeFails 连续失败, probeStreak 连续成功毫秒, probeReason 失败原因短码}，随主轮 `ContainerInfo` 上报（null 省略=不在探测集合或尚无样本）；判定阈值与动作（门禁/NOT_READY/替换）全在 Center，Center 失联期间照常探测、期望未变的实例保持现状。探测配置为 center 受信终值 DSL 不经过 ShellRiskChecker；inventory 失败轮不清条目 |
+| `ProcessOpsTask` | 10 秒 | 任务领取轮（无 secret 时跳过）：**唯一的领取者**（单条 CAS 领取通道不变，串行领取天然安全），进入"循环领取"连续领满空闲执行槽后提交任务执行池；各任务在执行池内独立执行、独立上报 |
+| `ReadinessProbeTask` | **5 秒 tick（`scheduleWithFixedDelay` 防重入；条目按 nextProbeAt 到期执行：启动期 5s 密集探测、首次成功回落稳态 15s）** | 就绪探测循环（DSL 摘要模型）：**多探测并存——tcpProbes/httpProbes/cmdProbes 三组数组同时生效（同类多条、跨类并存），单轮遍历全部执行，任一失败即判定失败（AND 语义），失败短码取首个失败探测**。配置双路径——**仅 tcp/http 的终值 DSL 经容器 label `uw.ops.probe` 声明式下发**（create 携带 + 主轮 inventory 收敛：label 在=配置在/值变=条目重建/容器删=条目消失，Docker 元数据即持久化真相源，agent 重启零恢复、改探针无需重部署）；**含 cmd（或含 secret 占位符的 tcp/http）经 START taskData 下发并落盘** `/etc/uw-ops-agent/probe/`（重启 `restoreFromDisk()` 重建）。执行器：tcp=JVM Socket connect、http=原生 HTTP 客户端（`expectCode` 期望码+可选 `expectBody` 响应体子串判定，读体限 64KB，均零进程 spawn、毫秒级），cmd=`/bin/sh -c` 默认 3s 超时（退出码 0 且可选 `expectOutput` 输出子串命中才算成功——输出仅内存判定，不落日志不上报）。agent 只做无判断聚合：每容器摘要 {probeSeq 单调, probeState 0/1/2, probeDate, probeFailNum 连续失败, probeSuccessMs 连续成功毫秒, probeReason 失败原因短码}，随主轮 `ContainerInfo` 上报（null 省略=不在探测集合或尚无样本）；判定阈值与动作（门禁/NOT_READY/替换）全在 Center，Center 失联期间照常探测、期望未变的实例保持现状。探测配置为 center 受信终值 DSL 不经过 ShellRiskChecker；inventory 失败轮不清条目 |
 
 主轮各环节硬预算：inventory 5s + stats 12s + 上报 15s ≈ **33s < 60s 周期**——`fixedRate` 激发时刻恒定（窗口恒定 60s），执行永远追不上激发；极端停摆后的追赶轮 gap 异常 → 该窗口 NULL，无雪崩。
 
@@ -98,11 +97,7 @@ execute_date 才接受"**：Agent 把领取时下发的 executeDate **原样随�
 
 任务执行并发模型：**领取单线程 + 执行池并发**。`ProcessOpsTask`（10s 轮）是唯一领取者，
 每轮池空时循环领取直到填满空闲槽（并发度 `uw.ops.agent.max-concurrent-tasks`，默认 4，
-执行池为固定线程池 daemon 线程 `agent-task-exec-N`）。**升级任务门禁**：升级任务（三 id 全 0）
-会退出进程，只能在执行池完全空闲时独占执行——领取无法预读队列头（升级任务可能就在队头），
-因此池非空时本轮不领任何任务，等池排空后的下一轮再领；同轮内先提交普通任务后领到升级任务
-的罕见场景不丢弃，暂存等池排空后由领取线程同步执行（成功上报 → 执行池 shutdown+10s 短等待
-→ 退出进程）。center 串行投放模式（GLOBAL_SERIAL/PER_HOST_SERIAL）下每主机同时最多一条到期
+执行池为固定线程池 daemon 线程 `agent-task-exec-N`）。
 任务，并发模型自然退化为"同一时刻只有一条在执行"，无副作用。
 
 任务载荷（v2.1 容器操作 API 化）：`taskData`（本地契约类 `vo/TaskData`，与 center 侧结构逐字一致）统一承载，
@@ -162,13 +157,7 @@ HTTP 响应不能触发这套重置流程。首次上报重试也不会覆盖并
 - **无 secret 不执行任何任务**：`ProcessOpsTask` 检测到本地无 secret 时跳过任务拉取与执行
 - **下行响应验签**：`getTaskList` 响应必须携带有效 `X-Center-Sign`（缺头/超窗/签名不符丢弃本轮响应）——**升级约束：先暂停任务领取，协同升级 Center 和 Agent，再恢复**；下行 v2 不回退旧签名，两端版本不匹配时拒绝任务领取
 - **危险命令拦截**：`ShellRiskChecker` 用正则黑名单拦截 `rm -rf /`、`mkfs`、`dd` 写裸盘、fork bomb、关机、覆写 `/etc/passwd` 等破坏性命令（辅助防线，挡误操作，不挡对抗）
-- **任务执行约束**：普通任务 10 分钟、升级任务 5 分钟超时；超时终止进程树，非零退出码按失败上报
-- **升级任务门禁**：升级任务只在执行池完全空闲时独占执行（避免其 `System.exit` 丢弃并发中的其它任务）；池忙时本轮不领任何任务（升级任务可能在队列头，领了不能执行会被 center 超时标失败），同轮领到的不丢弃、暂存等池排空后执行；升级退出前执行池 shutdown+10s 短等待（超时放弃，在途任务按崩溃兜底语义由 center 超时回收），JVM shutdown hook 兜底外部停机（systemd SIGTERM）
-
-## 配置
-
-### 环境变量
-
+- **任务执行约束**：默认 10 分钟超时（长任务由下发侧 timeoutSec 声明）；超时终止进程树，非零退出码按失败上报
 | 变量 | 必填 | 默认值 | 说明 |
 |---|---|---|---|
 | `OPS_CENTER_HOST` | 否 | `http://127.0.0.1:1000` | center 地址 |
