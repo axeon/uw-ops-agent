@@ -292,7 +292,7 @@ public class DockerInfoHelper {
 
     /**
      * 拉取全量容器 inventory（含非受管与 exited 容器，不过滤 label——统计上报所有容器；
-     * 配额核对所需的受管判定由 Center 端台账 planId 承担，不在 Agent 侧）。
+     * 配额核对所需的受管判定由 Center 端台账 ownerId 承担，不在 Agent 侧）。
      * JSON 一次性绑定到输入 vo，Id 为空的条目跳过；上报协议转换（ContainerInfo）由 HostStatsCollector 承担。
      *
      * @return 容器原始 vo 列表；请求失败或响应非法抛异常（本轮 inventory 失败由调用方处理）

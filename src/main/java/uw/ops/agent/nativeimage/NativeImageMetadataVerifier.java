@@ -278,7 +278,7 @@ public final class NativeImageMetadataVerifier {
         require(JsonUtils.parse(JsonUtils.toString(hardware), HostInfo.class).getCpuLogicalCount() == 8,
                 "HostInfo CPU capacity binding");
         ContainerInfo.Stats unknown = JsonUtils.parse(JsonUtils.toString(new ContainerInfo.Stats()), ContainerInfo.Stats.class);
-        require(unknown.getCpuPercent() == null && unknown.getNetworkIn() == null && unknown.getDiskRead() == null,
+        require(unknown.getCpuLoad() == null && unknown.getNetRx() == null && unknown.getDiskRead() == null,
                 "unknown metrics stay null");
         HostStats hostStats = new HostStats();
         hostStats.setStatsDate(new Date(1700000000000L));

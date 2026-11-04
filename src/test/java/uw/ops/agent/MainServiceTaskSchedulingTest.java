@@ -48,7 +48,7 @@ class MainServiceTaskSchedulingTest {
     private OpsTask newShellTask(long id, String script) {
         OpsTask task = new OpsTask();
         task.setId(id);
-        task.setPlanId(id);
+        task.setOwnerId(id);
         task.setContainerId(id);
         task.setClusterId(id);
         TaskData taskData = new TaskData();
@@ -81,21 +81,6 @@ class MainServiceTaskSchedulingTest {
     /**
      * 构造升级任务（三 id 全 0）。
      */
-    private OpsTask newUpgradeTask(long id, String script) {
-        OpsTask task = new OpsTask();
-        task.setId(id);
-        task.setPlanId(0L);
-        task.setContainerId(0L);
-        task.setClusterId(0L);
-        TaskData taskData = new TaskData();
-        taskData.setExecType(StructuredTaskExecutor.EXEC_TYPE_SHELL);
-        TaskData.ShellSection shell = new TaskData.ShellSection();
-        shell.setScript(script);
-        taskData.setShell(shell);
-        task.setTaskData(taskData);
-        return task;
-    }
-
     /**
      * 内存任务通道桩：队列按序出队（每 claim 一条，模拟现有单条 CAS 领取），记录领取尝试次数/
      * 实领任务数与上报载荷（上报全成功，不触发重试路径）。
@@ -192,46 +177,6 @@ class MainServiceTaskSchedulingTest {
     }
 
     @Test
-    void upgradeGateHoldsClaimWhilePoolBusyAndRunsAfterDrainThenExits() throws Exception {
-        //队头普通任务(长) + 队列第二位升级任务。
-        OpsTask normal = newShellTask(401L, "sleep 2");
-        OpsTask upgrade = newUpgradeTask(402L, "echo upgrade-ok");
-        long claimedStamp = System.currentTimeMillis() - 60_000;
-        upgrade.setExecuteDate(new Date(claimedStamp));
-        RecordingChannel channel = new RecordingChannel(List.of(normal, upgrade));
-        MainService.taskChannel = channel;
-        AtomicBoolean exitCalled = new AtomicBoolean(false);
-        MainService.exitAction = () -> exitCalled.set(true);
-
-        //第一轮：领到普通任务提交执行池，随后领到升级任务——池忙，不提交也不丢弃，暂存并停止领取。
-        new MainService.ProcessOpsTask().run();
-        assertEquals(2, channel.claims.get(), "round 1 claims normal then upgrade task");
-        assertNotNull(MainService.pendingUpgradeTask, "upgrade task claimed while pool busy must be held, not dropped");
-        assertEquals(402L, MainService.pendingUpgradeTask.getId());
-        assertTrue(channel.reports.isEmpty(), "upgrade task must not execute while pool is busy");
-
-        //第二轮：暂存升级任务在身 + 池忙 → 本轮不领任何任务（队列空也不再领取）。
-        new MainService.ProcessOpsTask().run();
-        assertEquals(2, channel.claims.get(), "busy pool must block all claiming in the round");
-        assertTrue(channel.reports.isEmpty() || channel.reports.size() == 1);
-
-        //等池排空后第三轮：暂存的升级任务同步执行→上报（原样携带领取时刻）→优雅停机→退出动作。
-        assertTrue(awaitReports(channel, 1), "normal task must finish");
-        awaitIdlePool();
-        new MainService.ProcessOpsTask().run();
-
-        assertTrue(exitCalled.get(), "successful upgrade must trigger process exit action");
-        OpsTask upgradeReport = channel.pollReportById(402L);
-        assertNotNull(upgradeReport, "held upgrade task must execute and report after pool drains");
-        assertEquals(TaskState.SUCCEED.getValue(), upgradeReport.getState());
-        assertEquals(claimedStamp, upgradeReport.getExecuteDate().getTime(),
-                "upgrade report must carry the claimed executeDate verbatim");
-        assertNull(MainService.pendingUpgradeTask, "held upgrade task must be cleared after execution");
-        //普通任务先于升级任务上报（升级独占执行，池排空后才跑）。
-        assertNotNull(channel.pollReportById(401L));
-    }
-
-    @Test
     void slotFullStopsClaimingUntilFreed() throws Exception {
         //并发度压到 2：3 条任务，第一轮只能领 2 条（槽满即停），第三条等槽释放后下一轮补领。
         MainService.maxConcurrentTasks = 2;
@@ -283,20 +228,4 @@ class MainServiceTaskSchedulingTest {
         assertEquals(TaskState.SUCCEED.getValue(), report.getState());
     }
 
-    @Test
-    void upgradeClaimedOnIdlePoolRunsImmediatelyAndExits() {
-        //池空时领到升级任务（队头）：本线程同步执行，成功上报后触发退出动作。
-        RecordingChannel channel = new RecordingChannel(List.of(newUpgradeTask(801L, "echo upgrade-now")));
-        MainService.taskChannel = channel;
-        AtomicBoolean exitCalled = new AtomicBoolean(false);
-        MainService.exitAction = () -> exitCalled.set(true);
-
-        new MainService.ProcessOpsTask().run();
-
-        assertTrue(exitCalled.get(), "upgrade on idle pool must run and exit in the same round");
-        assertEquals(1, channel.claims.get());
-        OpsTask report = channel.reports.get(0);
-        assertEquals(801L, report.getId());
-        assertEquals(TaskState.SUCCEED.getValue(), report.getState());
-    }
 }

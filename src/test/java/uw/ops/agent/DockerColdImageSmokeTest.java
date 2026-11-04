@@ -26,7 +26,7 @@ class DockerColdImageSmokeTest {
         OpsTask task = new OpsTask();
         task.setId(id);
         task.setContainerId(id);
-        task.setPlanId(id);
+        task.setOwnerId(id);
         TaskData data = new TaskData();
         data.setExecType("DOCKER");
         TaskData.ContainerSection docker = new TaskData.ContainerSection();

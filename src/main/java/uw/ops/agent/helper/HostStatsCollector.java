@@ -388,9 +388,9 @@ public class HostStatsCollector {
         if (knownCounter(curr.memUsage) && knownCounter(curr.memCache)) {
             stats.setMemUsage(Math.max(curr.memUsage - curr.memCache, 0));
         }
-        stats.setMemTotal(knownCounter(curr.memLimit) ? curr.memLimit : null);
+        stats.setMemLimit(knownCounter(curr.memLimit) ? curr.memLimit : null);
         if (stats.getMemUsage() != null && curr.memLimit != null && curr.memLimit > 0) {
-            stats.setMemPercent(round2(stats.getMemUsage() * 100.0 / curr.memLimit));
+            stats.setMemLoad(round2(stats.getMemUsage() * 100.0 / curr.memLimit));
         }
         if (knownCounter(curr.pidCount) && curr.pidCount <= Integer.MAX_VALUE) {
             stats.setPidCount(curr.pidCount.intValue());
@@ -401,7 +401,7 @@ public class HostStatsCollector {
         double seconds = (curr.monoNanos - prev.monoNanos) / 1_000_000_000.0;
         Long cpuDiff = counterDelta(curr.cpuTotalUsage, prev.cpuTotalUsage);
         if (cpuDiff != null) {
-            stats.setCpuPercent(round2(cpuDiff / 1_000_000_000.0 / seconds * 100));
+            stats.setCpuLoad(round2(cpuDiff / 1_000_000_000.0 / seconds * 100));
         }
         Long periodsDelta = counterDelta(curr.periods, prev.periods);
         if (periodsDelta != null && periodsDelta > 0) {
@@ -415,8 +415,8 @@ public class HostStatsCollector {
             }
         }
         if (prev.networksPresent && curr.networksPresent) {
-            stats.setNetworkIn(counterRate(curr.netRx, prev.netRx, seconds));
-            stats.setNetworkOut(counterRate(curr.netTx, prev.netTx, seconds));
+            stats.setNetRx(counterRate(curr.netRx, prev.netRx, seconds));
+            stats.setNetTx(counterRate(curr.netTx, prev.netTx, seconds));
             stats.setRxDropped(counterDelta(curr.rxDropped, prev.rxDropped));
             stats.setTxDropped(counterDelta(curr.txDropped, prev.txDropped));
             stats.setRxErrors(counterDelta(curr.rxErrors, prev.rxErrors));

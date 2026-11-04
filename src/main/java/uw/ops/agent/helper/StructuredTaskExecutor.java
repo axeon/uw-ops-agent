@@ -62,7 +62,7 @@ public final class StructuredTaskExecutor {
     /**
      * 受管容器 label：计划 id（管理分组）。
      */
-    public static final String LABEL_PLAN_ID = "uw.ops.plan-id";
+    public static final String LABEL_OWNER_ID = "uw.ops.owner-id";
 
     /**
      * 受管容器 label：容器 id（幂等定位的台账身份键）。
@@ -142,7 +142,7 @@ public final class StructuredTaskExecutor {
      * 执行 DOCKER 结构化任务：成功时置 dockerId/taskResult 与 SUCCEED 状态；
      * 失败抛固定英文摘要异常（不含 Env 值），由 MainService 统一置 FAILED 与 taskError。
      *
-     * @param opsTask  任务对象（containerId/planId 为 label 与定位材料）
+     * @param opsTask  任务对象（containerId/ownerId 为 label 与定位材料）
      * @param taskData 统一载荷（Docker 段必填）
      * @throws Exception 执行失败（message 为固定英文摘要，日志保留任务ID与异常类型）
      */
@@ -508,7 +508,7 @@ public final class StructuredTaskExecutor {
         param.setImage(docker.getImage());
         param.setEnv(buildEnv(docker.getEnv()));
         Map<String, String> labels = new LinkedHashMap<>();
-        labels.put(LABEL_PLAN_ID, String.valueOf(opsTask.getPlanId()));
+        labels.put(LABEL_OWNER_ID, String.valueOf(opsTask.getOwnerId()));
         labels.put(LABEL_CONTAINER_ID, String.valueOf(opsTask.getContainerId()));
         if (sensitiveOutput) {
             labels.put(LABEL_SENSITIVE, "true");

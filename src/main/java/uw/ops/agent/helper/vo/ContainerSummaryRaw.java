@@ -64,7 +64,7 @@ public class ContainerSummaryRaw {
     private String status;
 
     /**
-     * 容器 labels（受管容器识别：uw.ops.container-id / uw.ops.plan-id；手工容器无该标记）。
+     * 容器 labels（受管容器识别：uw.ops.container-id / uw.ops.owner-id；手工容器无该标记）。
      */
     @JsonProperty("Labels")
     private Map<String, String> labels;

@@ -53,7 +53,7 @@ class MainServiceTest {
     private OpsTask newShellTask() {
         OpsTask task = new OpsTask();
         task.setId(201L);
-        task.setPlanId(1L);
+        task.setOwnerId(1L);
         task.setContainerId(1L);
         task.setClusterId(1L);
         TaskData taskData = new TaskData();
@@ -76,7 +76,7 @@ class MainServiceTest {
         Date claimed = new Date(1700000000000L);
         OpsTask task = newShellTask();
         task.setExecuteDate(claimed);
-        MainService.dispatchOpsTask(task, false);
+        MainService.dispatchOpsTask(task);
         assertEquals(TaskState.SUCCEED.getValue(), task.getState());
         assertSame(claimed, task.getExecuteDate(), "dispatch layer must not rewrite claimed executeDate");
         //协议往返：字段名映射（无 PascalCase 注解）双向不丢失——领取响应反序列化与
@@ -104,7 +104,7 @@ class MainServiceTest {
         OpsTask task = newShellTask();
         task.getTaskData().getShell().setScript("printf '%s' 'hello-${APP_NAME}'");
         task.getTaskData().getShell().setPorts(Map.of("APP_NAME", "uw-app"));
-        MainService.dispatchOpsTask(task, false);
+        MainService.dispatchOpsTask(task);
         assertEquals(TaskState.SUCCEED.getValue(), task.getState());
         assertEquals("hello-${APP_NAME}", task.getTaskResult());
         assertEquals("printf '%s' 'hello-${APP_NAME}'", task.getTaskData().getShell().getScript());
@@ -118,7 +118,7 @@ class MainServiceTest {
             OpsTask task = newShellTask();
             task.getTaskData().getShell().setScript("echo hello-" + port);
             task.getTaskData().getShell().setPorts(Map.of("APP_PORT", String.valueOf(port)));
-            MainService.dispatchOpsTask(task, false);
+            MainService.dispatchOpsTask(task);
             assertEquals(TaskState.SUCCEED.getValue(), task.getState());
             assertEquals("hello-" + port, task.getTaskResult());
             assertEquals(String.valueOf(port), task.getTaskData().getShell().getPorts().get("APP_PORT"));
@@ -135,7 +135,7 @@ class MainServiceTest {
         String script = "printf '%s' '" + secret + "' > '" + output.toString().replace("'", "'\"'\"'") + "'";
         task.getTaskData().getShell().setScript(script);
         task.getTaskData().getShell().setPorts(new HashMap<>(Map.of("APP_PORT", "19000")));
-        MainService.dispatchOpsTask(task, false);
+        MainService.dispatchOpsTask(task);
         assertEquals(secret, Files.readString(output), "secret bytes must survive the real shell execution");
         assertEquals(script, task.getTaskData().getShell().getScript());
         assertEquals("19000", task.getTaskData().getShell().getPorts().get("APP_PORT"));
@@ -147,7 +147,7 @@ class MainServiceTest {
         OpsTask task = newShellTask();
         task.getTaskData().setSensitiveOutput(true);
         task.getTaskData().getShell().setScript("printf synthetic-output-secret");
-        MainService.dispatchOpsTask(task, false);
+        MainService.dispatchOpsTask(task);
         assertEquals(TaskState.SUCCEED.getValue(), task.getState());
         assertEquals("result withheld: task uses secrets.", task.getTaskResult());
     }
@@ -157,7 +157,7 @@ class MainServiceTest {
         OpsTask task = newShellTask();
         task.getTaskData().getShell().setScript("rm -rf /");
         task.getTaskData().getShell().setPorts(null);
-        assertThrows(SecurityException.class, () -> MainService.dispatchOpsTask(task, false));
+        assertThrows(SecurityException.class, () -> MainService.dispatchOpsTask(task));
         assertNotEquals(TaskState.SUCCEED.getValue(), task.getState());
     }
 
@@ -166,12 +166,12 @@ class MainServiceTest {
         //SHELL 载荷缺脚本（Shell 段或 Script 为空）：显式拒绝，不落到 /bin/sh -c null 的晦默 NPE。
         OpsTask task = newShellTask();
         task.getTaskData().getShell().setScript(null);
-        Exception error = assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(task, false));
+        Exception error = assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(task));
         assertTrue(error.getMessage().contains("shell.script missing"), error.getMessage());
 
         OpsTask noSection = newShellTask();
         noSection.getTaskData().setShell(null);
-        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(noSection, false));
+        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(noSection));
     }
 
     @Test
@@ -194,7 +194,7 @@ class MainServiceTest {
         });
         OpsTask task = new OpsTask();
         task.setId(202L);
-        task.setPlanId(11L);
+        task.setOwnerId(11L);
         task.setContainerId(123L);
         task.setClusterId(1L);
         TaskData taskData = new TaskData();
@@ -207,7 +207,7 @@ class MainServiceTest {
         taskData.setContainer(docker);
         task.setTaskData(taskData);
 
-        MainService.dispatchOpsTask(task, false);
+        MainService.dispatchOpsTask(task);
         //DOCKER 分支走结构化执行器：create+start+等待 running，dockerId 回填。
         assertEquals(TaskState.SUCCEED.getValue(), task.getState());
         assertEquals("def456", task.getDockerId());
@@ -219,7 +219,7 @@ class MainServiceTest {
         OpsTask task = new OpsTask();
         task.setId(203L);
         //升级任务三 id 全 0，SHELL 自举路径（独立 5 分钟超时）。
-        task.setPlanId(0L);
+        task.setOwnerId(0L);
         task.setContainerId(0L);
         task.setClusterId(0L);
         TaskData taskData = new TaskData();
@@ -229,7 +229,7 @@ class MainServiceTest {
         taskData.setShell(shell);
         task.setTaskData(taskData);
 
-        MainService.dispatchOpsTask(task, true);
+        MainService.dispatchOpsTask(task);
         assertEquals(TaskState.SUCCEED.getValue(), task.getState());
         assertEquals("upgrade-ok", task.getTaskResult());
     }
@@ -238,11 +238,11 @@ class MainServiceTest {
     void dispatchUnknownExecTypeRejected() {
         OpsTask task = newShellTask();
         task.getTaskData().setExecType("FOO");
-        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(task, false));
+        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(task));
 
         //taskData 缺失同样拒绝（不静默走 shell）。
         OpsTask noTaskData = newShellTask();
         noTaskData.setTaskData(null);
-        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(noTaskData, false));
+        assertThrows(IllegalArgumentException.class, () -> MainService.dispatchOpsTask(noTaskData));
     }
 }

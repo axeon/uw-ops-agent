@@ -668,7 +668,7 @@ public class ContainerInspectRaw {
         private String image;
 
         /**
-         * 容器 labels（uw.ops.container-id / uw.ops.plan-id）。
+         * 容器 labels（uw.ops.container-id / uw.ops.owner-id）。
          */
         @JsonProperty("Labels")
         private Map<String, String> labels;

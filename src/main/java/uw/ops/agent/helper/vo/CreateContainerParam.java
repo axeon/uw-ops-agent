@@ -117,7 +117,7 @@ public class CreateContainerParam {
     private List<String> entrypoint;
 
     /**
-     * 受管标记（uw.ops.plan-id / uw.ops.container-id，探测识别与管理分组）。
+     * 受管标记（uw.ops.owner-id / uw.ops.container-id，探测识别与管理分组）。
      */
     @JsonProperty("Labels")
     private Map<String, String> labels;

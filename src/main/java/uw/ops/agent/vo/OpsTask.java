@@ -24,17 +24,32 @@ public class OpsTask implements Serializable {
     private long id;
 
     /**
-     * 部署计划id（升级任务为 0）。
+     * 归属类型：PLAN=部署方案/mysql/es/redis/rabbit（与 ops_deploy_task.owner_type 一致）。
      */
-    private long planId;
+    private String ownerType;
 
     /**
-     * 计划容器id（升级任务为 0；label 与幂等定位材料）。
+     * 归属主体id：PLAN=方案id/域=集群id（与 ops_deploy_task.owner_id 一致）。
+     */
+    private long ownerId;
+
+    /**
+     * 归属子体id：PLAN=建单时目标版本id/域=serverId（与 ops_deploy_task.owner_sub_id 一致）。
+     */
+    private long ownerSubId;
+
+    /**
+     * mw 任务型标签（joinNode/backup 等；PLAN 行为空串）。
+     */
+    private String ownerTag;
+
+    /**
+     * 计划容器id（label 与幂等定位材料）。
      */
     private long containerId;
 
     /**
-     * 集群id（升级任务为 0）。
+     * 集群id（PLAN 行=host cluster 快照；mw 行恒 0）。
      */
     private long clusterId;
 
@@ -117,12 +132,36 @@ public class OpsTask implements Serializable {
         this.id = id;
     }
 
-    public long getPlanId() {
-        return planId;
+    public String getOwnerType() {
+        return ownerType;
     }
 
-    public void setPlanId(long planId) {
-        this.planId = planId;
+    public void setOwnerType(String ownerType) {
+        this.ownerType = ownerType;
+    }
+
+    public long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(long ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public long getOwnerSubId() {
+        return ownerSubId;
+    }
+
+    public void setOwnerSubId(long ownerSubId) {
+        this.ownerSubId = ownerSubId;
+    }
+
+    public String getOwnerTag() {
+        return ownerTag;
+    }
+
+    public void setOwnerTag(String ownerTag) {
+        this.ownerTag = ownerTag;
     }
 
     public long getContainerId() {

@@ -77,7 +77,7 @@ class StructuredTaskExecutorTest {
     private OpsTask newStartTask() {
         OpsTask task = new OpsTask();
         task.setId(101L);
-        task.setPlanId(11L);
+        task.setOwnerId(11L);
         task.setContainerId(123L);
         TaskData taskData = new TaskData();
         taskData.setExecType(StructuredTaskExecutor.EXEC_TYPE_DOCKER);
@@ -103,7 +103,7 @@ class StructuredTaskExecutorTest {
     private OpsTask newStopTask() {
         OpsTask task = new OpsTask();
         task.setId(102L);
-        task.setPlanId(11L);
+        task.setOwnerId(11L);
         task.setContainerId(123L);
         TaskData taskData = new TaskData();
         taskData.setExecType(StructuredTaskExecutor.EXEC_TYPE_DOCKER);
@@ -164,7 +164,7 @@ class StructuredTaskExecutorTest {
         assertTrue(createRequest.startsWith("POST /containers/create?name=uw-ops-123 "), createRequest);
         //请求体全集断言：镜像/Labels/Env(无 TZ 条目时注入主机时区)/NetworkMode/RestartPolicy/Memory(MB→字节)/NanoCpus/Binds/PortBindings。
         assertTrue(createRequest.contains("\"Image\":\"" + IMAGE + "\""), createRequest);
-        assertTrue(createRequest.contains("\"uw.ops.plan-id\":\"11\"") && createRequest.contains("\"uw.ops.container-id\":\"123\""), createRequest);
+        assertTrue(createRequest.contains("\"uw.ops.owner-id\":\"11\"") && createRequest.contains("\"uw.ops.container-id\":\"123\""), createRequest);
         assertTrue(createRequest.contains("\"Env\":[\"APP_PORT=10010\",\"TZ=Asia/Shanghai\"]"), createRequest);
         assertTrue(createRequest.contains("\"NetworkMode\":\"host\""), createRequest);
         assertTrue(createRequest.contains("\"Name\":\"unless-stopped\""), createRequest);

@@ -52,21 +52,21 @@ class HostStatsCollectorTest {
     void missingBaselineAndInvalidWindowStayUnknown() throws Exception {
         ContainerCounters current = counters(120, 600);
         ContainerInfo.Stats first = diff(null, current);
-        assertNull(first.getCpuPercent());
+        assertNull(first.getCpuLoad());
         assertNull(first.getDiskRead());
         assertNull(first.getCpuThrottle());
         assertEquals(1024L, first.getMemUsage());
         ContainerInfo.Stats gap = diff(counters(1, 100), current);
-        assertNull(gap.getCpuPercent());
-        assertNull(gap.getNetworkIn());
+        assertNull(gap.getCpuLoad());
+        assertNull(gap.getNetRx());
     }
 
     @Test
     void validZeroIsPreservedButAbsentSubsystemsStayUnknown() throws Exception {
         ContainerInfo.Stats sample = diff(counters(60, 100), counters(120, 100));
-        assertEquals(0.0, sample.getCpuPercent());
+        assertEquals(0.0, sample.getCpuLoad());
         assertNull(sample.getCpuThrottle());
-        assertNull(sample.getNetworkIn());
+        assertNull(sample.getNetRx());
         assertNull(sample.getDiskRead());
     }
 
@@ -77,7 +77,7 @@ class HostStatsCollectorTest {
         before.diskRead = 200L;
         after.diskRead = 100L;
         ContainerInfo.Stats sample = diff(before, after);
-        assertNull(sample.getCpuPercent());
+        assertNull(sample.getCpuLoad());
         assertNull(sample.getDiskRead());
     }
 
@@ -88,10 +88,10 @@ class HostStatsCollectorTest {
         before.monoNanos = 60_000_000_000L;
         after.monoNanos = 120_000_000_000L;
         ContainerInfo.Stats sample = diff(before, after);
-        assertNull(sample.getCpuPercent());
+        assertNull(sample.getCpuLoad());
         assertNull(sample.getMemUsage());
-        assertNull(sample.getMemPercent());
-        assertNull(sample.getMemTotal());
+        assertNull(sample.getMemLoad());
+        assertNull(sample.getMemLimit());
         assertNull(sample.getPidCount());
         assertNull(sample.getPidsLimit());
         assertNull(sample.getDiskRead());
@@ -107,12 +107,12 @@ class HostStatsCollectorTest {
         before.monoNanos = 60_000_000_000L;
         after.monoNanos = 120_000_000_000L;
         ContainerInfo.Stats sample = diff(before, after);
-        assertEquals(0.0, sample.getCpuPercent());
+        assertEquals(0.0, sample.getCpuLoad());
         assertEquals(0.0, sample.getCpuThrottle());
-        assertEquals(0L, sample.getNetworkIn());
+        assertEquals(0L, sample.getNetRx());
         assertEquals(0L, sample.getDiskRead());
         ContainerInfo.Stats decoded = JsonUtils.parse(JsonUtils.toString(sample), ContainerInfo.Stats.class);
-        assertEquals(0.0, decoded.getCpuPercent());
+        assertEquals(0.0, decoded.getCpuLoad());
         assertNull(decoded.getMemUsage());
     }
 
@@ -125,8 +125,8 @@ class HostStatsCollectorTest {
         before.monoNanos = 60_000_000_000L;
         after.monoNanos = 120_000_000_000L;
         ContainerInfo.Stats sample = diff(before, after);
-        assertNull(sample.getNetworkIn(), "missing second interface must not be counted as zero traffic");
-        assertEquals(0L, sample.getNetworkOut());
+        assertNull(sample.getNetRx(), "missing second interface must not be counted as zero traffic");
+        assertEquals(0L, sample.getNetTx());
         assertNull(sample.getDiskRead(), "reset disk counter is unknown");
         assertEquals(0L, sample.getDiskWrite());
     }
@@ -134,18 +134,18 @@ class HostStatsCollectorTest {
     @Test
     void unknownMetricsSurviveJsonRoundTrip() {
         ContainerInfo.Stats decoded = JsonUtils.parse(JsonUtils.toString(new ContainerInfo.Stats()), ContainerInfo.Stats.class);
-        assertNull(decoded.getCpuPercent());
+        assertNull(decoded.getCpuLoad());
         assertNull(decoded.getCpuThrottle());
         assertNull(decoded.getCpuThrottleFreq());
-        assertNull(decoded.getMemPercent());
+        assertNull(decoded.getMemLoad());
         assertNull(decoded.getMemUsage());
-        assertNull(decoded.getMemTotal());
+        assertNull(decoded.getMemLimit());
         assertNull(decoded.getPidCount());
         assertNull(decoded.getPidsLimit());
         assertNull(decoded.getDiskRead());
         assertNull(decoded.getDiskWrite());
-        assertNull(decoded.getNetworkIn());
-        assertNull(decoded.getNetworkOut());
+        assertNull(decoded.getNetRx());
+        assertNull(decoded.getNetTx());
         assertNull(decoded.getRxDropped());
         assertNull(decoded.getTxDropped());
         assertNull(decoded.getRxErrors());

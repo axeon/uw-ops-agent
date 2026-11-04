@@ -195,7 +195,7 @@ class SmokeManualTest {
         ContainerInspectRaw inspect = DockerInfoHelper.containerInspect(task.getDockerId());
         assertTrue(Boolean.TRUE.equals(inspect.getState().getRunning()), "容器应 running: " + inspect.getState());
         assertEquals("uw-ops-" + task.getContainerId(), inspect.getName() != null && inspect.getName().startsWith("/") ? inspect.getName().substring(1) : inspect.getName(), "容器名应为 uw-ops-{containerId}");
-        assertEquals(String.valueOf(task.getPlanId()), inspect.getConfig().getLabels().get(StructuredTaskExecutor.LABEL_PLAN_ID), "label uw.ops.plan-id 应为 planId");
+        assertEquals(String.valueOf(task.getOwnerId()), inspect.getConfig().getLabels().get(StructuredTaskExecutor.LABEL_OWNER_ID), "label uw.ops.owner-id 应为 ownerId");
         assertEquals(String.valueOf(task.getContainerId()), inspect.getConfig().getLabels().get(StructuredTaskExecutor.LABEL_CONTAINER_ID), "label uw.ops.container-id 应为 containerId");
         //容器 Env 断言在 bash 侧用 docker inspect CLI 核对（inspect vo 未映射 Env 字段）。
         //===== 上报回填（重复上报幂等复核）=====
@@ -203,7 +203,7 @@ class SmokeManualTest {
         System.out.println("[smoke] step3 DONE taskId=" + task.getId() + " containerId=" + task.getContainerId()
                 + " dockerId=" + task.getDockerId() + " actualPorts=" + task.getActualPorts());
         Files.writeString(SMOKE_DIR.resolve("last-start-result.txt"),
-                "taskId=" + task.getId() + "\ncontainerId=" + task.getContainerId() + "\nplanId=" + task.getPlanId()
+                "taskId=" + task.getId() + "\ncontainerId=" + task.getContainerId() + "\nownerId=" + task.getOwnerId()
                         + "\ndockerId=" + task.getDockerId() + "\ncontainerName=" + docker.getContainerName() + "\n", StandardCharsets.UTF_8);
     }
 
@@ -254,7 +254,7 @@ class SmokeManualTest {
      */
     private static void executeAndReport(OpsTask task) throws Exception {
         try {
-            MainService.dispatchOpsTask(task, false);
+            MainService.dispatchOpsTask(task);
         } catch (Throwable e) {
             task.setTaskError(e.getMessage() != null ? e.getMessage() : e.getClass().getName());
             task.setState(TaskState.FAILED.getValue());
@@ -301,7 +301,7 @@ class SmokeManualTest {
         assertEquals(1, claimed.getData().size(), "应恰为一条任务");
         OpsTask task = claimed.getData().get(0);
         try {
-            MainService.dispatchOpsTask(task, false);
+            MainService.dispatchOpsTask(task);
         } catch (Throwable e) {
             task.setTaskError(e.getMessage() != null ? e.getMessage() : e.getClass().getName());
             task.setState(TaskState.FAILED.getValue());

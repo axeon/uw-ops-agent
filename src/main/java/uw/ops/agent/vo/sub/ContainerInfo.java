@@ -243,9 +243,9 @@ public class ContainerInfo {
      * <p>
      * 字段级 NULL 表示未采集、差分失效或不适用；0 仅表示有效采样测得零值。
      * <ul>
-     *   <li>cpuPercent：单核口径百分比（可超 100%，×10 = milliCores），窗口平均；</li>
-     *   <li>networkIn/networkOut/diskRead/diskWrite：窗口平均速率（字节/秒），host 网络模式容器网络项为 NULL；</li>
-     *   <li>memPercent：working set 占配额百分比（v1 扣 cache / v2 扣 inactive_file）。</li>
+     *   <li>cpuLoad：单核口径百分比（可超 100%，×10 = milliCores），窗口平均；</li>
+     *   <li>netRx/netTx/diskRead/diskWrite：窗口平均速率（字节/秒），host 网络模式容器网络项为 NULL；</li>
+     *   <li>memLoad：working set 占配额百分比（v1 扣 cache / v2 扣 inactive_file）。</li>
      * </ul>
      */
     public static class Stats implements Serializable {
@@ -253,7 +253,7 @@ public class ContainerInfo {
         /**
          * cpu占用率：单核口径百分比，可超100，两位小数。
          */
-        private Double cpuPercent;
+        private Double cpuLoad;
 
         /**
          * cpu被配额限流时长占比(百分比,两位小数,0-100)。落库 ops_container_stats.cpu_throttle。
@@ -264,7 +264,7 @@ public class ContainerInfo {
         /**
          * 内存使用率(working set 占配额百分比,两位小数)。
          */
-        private Double memPercent;
+        private Double memLoad;
 
         /**
          * 内存使用(working set字节)，不落库（ops_container_stats 无对应列），随热信号缓存对象保留。
@@ -274,7 +274,7 @@ public class ContainerInfo {
         /**
          * 内存限制(字节)。
          */
-        private Long memTotal;
+        private Long memLimit;
 
         /**
          * 磁盘写速率(字节/秒)。
@@ -289,12 +289,12 @@ public class ContainerInfo {
         /**
          * 网络入站速率(字节/秒)。host网络模式容器无networks数据，置NULL不是0。
          */
-        private Long networkIn;
+        private Long netRx;
 
         /**
          * 网络出站速率(字节/秒)。host网络模式为NULL。
          */
-        private Long networkOut;
+        private Long netTx;
 
         /**
          * 进程/线程数(窗口末值)。
@@ -331,12 +331,12 @@ public class ContainerInfo {
          */
         private Long pidsLimit;
 
-        public Double getCpuPercent() {
-            return cpuPercent;
+        public Double getCpuLoad() {
+            return cpuLoad;
         }
 
-        public void setCpuPercent(Double cpuPercent) {
-            this.cpuPercent = cpuPercent;
+        public void setCpuLoad(Double cpuLoad) {
+            this.cpuLoad = cpuLoad;
         }
 
         public Double getCpuThrottle() {
@@ -347,12 +347,12 @@ public class ContainerInfo {
             this.cpuThrottle = cpuThrottle;
         }
 
-        public Double getMemPercent() {
-            return memPercent;
+        public Double getMemLoad() {
+            return memLoad;
         }
 
-        public void setMemPercent(Double memPercent) {
-            this.memPercent = memPercent;
+        public void setMemLoad(Double memLoad) {
+            this.memLoad = memLoad;
         }
 
         public Long getMemUsage() {
@@ -363,12 +363,12 @@ public class ContainerInfo {
             this.memUsage = memUsage;
         }
 
-        public Long getMemTotal() {
-            return memTotal;
+        public Long getMemLimit() {
+            return memLimit;
         }
 
-        public void setMemTotal(Long memTotal) {
-            this.memTotal = memTotal;
+        public void setMemLimit(Long memLimit) {
+            this.memLimit = memLimit;
         }
 
         public Long getDiskWrite() {
@@ -387,20 +387,20 @@ public class ContainerInfo {
             this.diskRead = diskRead;
         }
 
-        public Long getNetworkIn() {
-            return networkIn;
+        public Long getNetRx() {
+            return netRx;
         }
 
-        public void setNetworkIn(Long networkIn) {
-            this.networkIn = networkIn;
+        public void setNetRx(Long netRx) {
+            this.netRx = netRx;
         }
 
-        public Long getNetworkOut() {
-            return networkOut;
+        public Long getNetTx() {
+            return netTx;
         }
 
-        public void setNetworkOut(Long networkOut) {
-            this.networkOut = networkOut;
+        public void setNetTx(Long netTx) {
+            this.netTx = netTx;
         }
 
         public Integer getPidCount() {

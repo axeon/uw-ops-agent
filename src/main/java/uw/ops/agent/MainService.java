@@ -76,11 +76,6 @@ public class MainService {
     private static final long TASK_TIMEOUT_MILLIS = 600_000L;
 
     /**
-     * 升级任务脚本执行超时：5分钟(下载二进制)。
-     */
-    private static final long UPGRADE_TIMEOUT_MILLIS = 300_000L;
-
-    /**
      * 任务执行池优雅停机等待上限(秒)：升级退出/外部停机时等待在途任务上报完成，超时放弃
      * （在途任务按崩溃兜底语义由 center 超时回收，升级场景可接受）。
      */
@@ -102,12 +97,6 @@ public class MainService {
      * 任务并发上限（领取循环空闲槽判定；初始=执行池线程数，测试可调整）。
      */
     static volatile int maxConcurrentTasks = Constants.getMaxConcurrentTasks();
-
-    /**
-     * 暂存的升级任务：同轮领取先提交了普通任务、随后领到升级任务时（升级门禁挡住的是整轮
-     * 首领，此场景仅同轮内可达）——不提交也不丢弃，暂存等池完全排空后由领取线程同步执行。
-     */
-    static volatile OpsTask pendingUpgradeTask;
 
     /**
      * 生产任务通道：OpsAgentApi getTaskList（单条领取）/ reportTaskResult（单条上报）。
@@ -139,11 +128,6 @@ public class MainService {
      * secret 可用性判定（测试可替换）：生产=SecretStore.load() 非空。
      */
     static BooleanSupplier secretReady = () -> StringUtils.isNotBlank(SecretStore.load());
-
-    /**
-     * 进程退出动作（测试可替换）：生产=System.exit(0)，调用方已完成执行池优雅停机。
-     */
-    static Runnable exitAction = () -> System.exit(0);
 
     /**
      * 任务通道接缝：领取(单条 CAS)与上报(单条)两个端点的最小抽象。
@@ -325,12 +309,6 @@ public class MainService {
      * <p>
      * 领取线程保持单线程：领取是单条 CAS 通道（center 侧 INIT→STARTING），串行领取天然安全、
      * 协议不变。每轮进入"循环领取"：池空时连续领取并提交执行池，直到无空闲槽或队列领空。
-     * <p>
-     * 升级任务门禁：升级任务(planId==0 && containerId==0 && clusterId==0)只能在执行池完全空闲
-     * 时执行（其成功路径会退出进程）。领取无法预读队列头——升级任务可能就在队头，若在池忙时
-     * 领到却不能执行，会把它占在 STARTING 直到 center 超时把 CMD 任务标失败。因此本轮一旦
-     * 池非空就不领任何任务，等池排空后的下一轮再领；同轮内先提交普通任务后领到升级任务的
-     * 罕见场景，暂存不丢弃（{@link #pendingUpgradeTask}），等池排空后同步执行。
      */
     public static class ProcessOpsTask implements Runnable {
 
@@ -343,21 +321,6 @@ public class MainService {
                 return;
             }
             try {
-                // 暂存的升级任务最优先：等池完全排空后在本线程同步执行（成功即优雅退出），
-                // 排空/执行期间都不领任何新任务。
-                OpsTask heldUpgrade = pendingUpgradeTask;
-                if (heldUpgrade != null) {
-                    if (activeTasks.get() == 0) {
-                        pendingUpgradeTask = null;
-                        runUpgradeTaskAndExitOnSuccess(heldUpgrade);
-                    }
-                    return;
-                }
-                // 升级门禁：池非空时本轮不领任何任务（升级任务可能在队列头，领了不能执行就卡住），
-                // break 出循环等下轮。
-                if (activeTasks.get() > 0) {
-                    return;
-                }
                 // 循环领取：领到即提交执行池（各任务独立执行、独立上报），直到无空闲槽或领空。
                 while (activeTasks.get() < maxConcurrentTasks) {
                     OpsTask opsTask = claimOneTask();
@@ -365,25 +328,13 @@ public class MainService {
                         break;
                     }
                     claimed++;
-                    if (isUpgradeTask(opsTask)) {
-                        if (activeTasks.get() == 0) {
-                            // 池空时领到升级任务：本线程同步执行（执行+上报+成功即优雅退出）。
-                            runUpgradeTaskAndExitOnSuccess(opsTask);
-                        } else {
-                            // 同轮先提交了普通任务后领到升级任务：不提交也不丢弃，暂存等池空，
-                            // 本轮领取到此为止（下轮优先处理暂存任务）。
-                            pendingUpgradeTask = opsTask;
-                        }
-                        // 升级任务终止本轮领取：成功路径会退出进程，后续任务留给新版本进程。
-                        break;
-                    }
                     submitTask(opsTask);
                 }
             } catch (Throwable e) {
                 log.error("Agent operation failed, errorType={}", e.getClass().getSimpleName());
             }
-            log.info("ProcessOpsTask round finished: claimed={}, activeTasks={}, pendingUpgrade={} in {}ms.",
-                    claimed, activeTasks.get(), pendingUpgradeTask != null, SystemClock.now() - start);
+            log.info("ProcessOpsTask round finished: claimed={}, activeTasks={} in {}ms.",
+                    claimed, activeTasks.get(), SystemClock.now() - start);
         }
     }
 
@@ -423,24 +374,9 @@ public class MainService {
     }
 
     /**
-     * 同步执行升级任务（领取线程，仅在池完全空闲时被调用）：执行+上报，成功则优雅停机
-     * （执行池 shutdown+awaitTermination 10s 短等待）后退出进程，由外部机制(systemd/supervisor)
-     * 重启新版本；失败则保持当前进程继续运行。
-     */
-    private static void runUpgradeTaskAndExitOnSuccess(OpsTask opsTask) {
-        if (runOpsTask(opsTask)) {
-            log.warn("!!!uw-ops-agent self update finished, exiting for restart...");
-            gracefulShutdownTaskPool();
-            exitAction.run();
-            return;
-        }
-        log.error("uw-ops-agent self update failed or result was not reported; keep current process running.");
-    }
-
-    /**
      * 任务执行池优雅停机：shutdown + 短等待（{@link #TASK_POOL_SHUTDOWN_WAIT_SECONDS} 秒，
-     * 超时放弃）。升级退出路径同步调用；JVM shutdown hook 兜底（systemd SIGTERM 等外部停机，
-     * 相当于容器环境的 PreDestroy）。对已终止的池幂等（立即返回）。
+     * 超时放弃）。JVM shutdown hook 兜底（systemd SIGTERM 等外部停机，相当于容器环境的
+     * PreDestroy）。对已终止的池幂等（立即返回）。
      */
     private static void gracefulShutdownTaskPool() {
         taskExecutor.shutdown();
@@ -468,17 +404,15 @@ public class MainService {
     }
 
     /**
-     * 重置任务执行运行时（测试专用）：换新执行池、清零占槽计数/暂存升级任务并还原接缝。
+     * 重置任务执行运行时（测试专用）：换新执行池、清零占槽计数并还原接缝。
      * 生产代码不得调用。
      */
     static void resetTaskRuntime() {
         taskExecutor.shutdownNow();
         taskExecutor = newTaskExecutor();
         activeTasks.set(0);
-        pendingUpgradeTask = null;
         taskChannel = HTTP_TASK_CHANNEL;
         secretReady = () -> StringUtils.isNotBlank(SecretStore.load());
-        exitAction = () -> System.exit(0);
         maxConcurrentTasks = Constants.getMaxConcurrentTasks();
     }
 
@@ -543,16 +477,8 @@ public class MainService {
     }
 
     /**
-     * 判断是否为 agent 自身升级任务。
-     */
-    private static boolean isUpgradeTask(OpsTask opsTask) {
-        return opsTask.getPlanId() == 0 && opsTask.getContainerId() == 0 && opsTask.getClusterId() == 0;
-    }
-
-    /**
-     * 执行单个 ops 任务(分发执行器、上报结果)——执行池任务 Runnable 的入口
-     * （升级任务为领取线程同步调用的入口，语义相同）。
-     * 升级任务使用独立长超时；只有任务执行成功且结果上报成功时才返回成功。
+     * 执行单个 ops 任务(分发执行器、上报结果)——执行池任务 Runnable 的入口。
+     * 只有任务执行成功且结果上报成功时才返回成功。
      * <p>
      * executeDate 契约（与 center 侧联动，<b>center 侧迟到判定为"上报 executeDate 等于行内
      * execute_date 才接受"</b>）：领取响应下发的 executeDate（=center 写入的领取时刻）
@@ -567,10 +493,9 @@ public class MainService {
      * @return 任务执行和结果上报均成功时返回 true
      */
     static boolean runOpsTask(OpsTask opsTask) {
-        boolean isUpgrade = isUpgradeTask(opsTask);
         boolean executionSucceeded = false;
         try {
-            dispatchOpsTask(opsTask, isUpgrade);
+            dispatchOpsTask(opsTask);
             executionSucceeded = true;
         } catch (Throwable e) {
             log.error("Agent operation failed, errorType={}", e.getClass().getSimpleName());
@@ -600,14 +525,13 @@ public class MainService {
      * <ul>
      *   <li>DOCKER → {@link StructuredTaskExecutor}（结构化唯一通道，无 shell 回退）；</li>
      *   <li>SHELL → shell 执行器（/bin/bash -c + ShellRiskChecker，宿主脚本为 bash 方言）；Center 已完成端口和秘密替换，
-     *       Agent 不再次解释模板或改写已分配端口；升级任务同走此路径；</li>
+     *       Agent 不再次解释模板或改写已分配端口；</li>
      *   <li>缺失/未知 execType → 拒绝执行（任务 FAILED，不静默走 shell）。</li>
      * </ul>
      *
-     * @param opsTask   任务对象
-     * @param isUpgrade 是否为 agent 自身升级任务
+     * @param opsTask 任务对象
      */
-    static void dispatchOpsTask(OpsTask opsTask, boolean isUpgrade) throws Exception {
+    static void dispatchOpsTask(OpsTask opsTask) throws Exception {
         TaskData taskData = opsTask.getTaskData();
         String execType = taskData == null ? null : taskData.getExecType();
         if (StructuredTaskExecutor.EXEC_TYPE_DOCKER.equals(execType)) {
@@ -630,19 +554,11 @@ public class MainService {
         if (danger != null) {
             throw new SecurityException(danger);
         }
-        if (isUpgrade) {
-            // 升级任务同步执行，确保退出前任务结果已经上报。
-            opsTask.setTaskResult("!!!uw-ops-agent start self updating......");
-            log.warn(opsTask.getTaskResult());
-            opsTask.setState(TaskState.STARTING.getValue());
-            runTaskScript(opsTask, script, UPGRADE_TIMEOUT_MILLIS);
-        } else {
-            //载荷超时分级（长任务——备份/恢复类——由下发侧声明；null=默认 600s）
-            long timeoutMillis = taskData.getShell() != null && taskData.getShell().getTimeoutSec() != null
-                    && taskData.getShell().getTimeoutSec() > 0
-                    ? taskData.getShell().getTimeoutSec() * 1000L : TASK_TIMEOUT_MILLIS;
-            runTaskScript(opsTask, script, timeoutMillis);
-        }
+        //载荷超时分级（长任务——备份/恢复类——由下发侧声明；null=默认 600s）
+        long timeoutMillis = taskData.getShell() != null && taskData.getShell().getTimeoutSec() != null
+                && taskData.getShell().getTimeoutSec() > 0
+                ? taskData.getShell().getTimeoutSec() * 1000L : TASK_TIMEOUT_MILLIS;
+        runTaskScript(opsTask, script, timeoutMillis);
     }
 
 }
